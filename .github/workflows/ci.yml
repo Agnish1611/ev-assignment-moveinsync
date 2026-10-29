@@ -1,0 +1,38 @@
+name: CI Verification Gate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify:
+    name: Build & Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Make scripts executable
+        run: |
+          chmod +x mvnw
+          chmod +x scripts/verify.sh
+
+      - name: Run verification gate
+        run: ./scripts/verify.sh
+
+      - name: Docker compose smoke test
+        run: |
+          docker compose up -d
+          sleep 5
+          docker compose ps
+          docker compose down -v

@@ -1,0 +1,14 @@
+# Protected files (see AGENTS.md section 10)
+# Changes require explicit review / approval
+
+* @senior-engineer
+
+# Strictly protected paths:
+/AGENTS.md @lead-architect
+/CLAUDE.md @lead-architect
+/docs/ARCHITECTURE.md @lead-architect
+/scripts/verify.sh @lead-architect
+/.github/workflows/ @lead-architect
+/checkstyle.xml @lead-architect
+/spotbugs-exclude.xml @lead-architect
+/ev-validator/src/test/ @lead-architect

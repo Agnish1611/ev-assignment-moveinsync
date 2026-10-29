@@ -1,0 +1,12 @@
+target/
+**/target/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+*.log
+*.tmp
+.mvn/.wrapper/
+.jdk/
+.jqwik-database/
+.jqwik-database
