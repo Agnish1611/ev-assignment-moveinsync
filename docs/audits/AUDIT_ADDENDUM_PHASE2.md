@@ -205,3 +205,29 @@ TrustModelTest report valid: true, violations: 0
 
 Remediation will proceed across 12 ordered commits (C1 through C12) on branch `fix/phase2-remediation`. No gates will be relaxed.
 
+---
+
+## 9. Audit Findings Closure Matrix (F-01 through F-18)
+
+| Finding ID | Severity | Category | Remediation Commit | Verification Evidence | Status |
+|:---|:---:|:---:|:---|:---|:---:|
+| **F-01** | CRITICAL | GATE | `c1e321e` (C1) & `6bc2d27` (C11) | `scripts/verify.sh` active; Checkstyle, SpotBugs, forbidden grep, and JaCoCo check all pass cleanly | **CLOSED** |
+| **F-02** | BLOCKER | SOUNDNESS | `d6779a0` (C3) & `85b0182` (C4) | Decisions D1 & D2; recomputed timeline verified; `CLAIMED_SOC_MISMATCH` emitted; Mutations 12–15 | **CLOSED** |
+| **F-03** | MAJOR | SECURITY | `40f3536` (C2) & `d6779a0` (C3) | `TenantId` on all entities; `TENANT_MISMATCH` emitted on cross-tenant assignments; Mutation 16 | **CLOSED** |
+| **F-04** | MAJOR | ROBUSTNESS | `be5c563` (C5) | Target SoC clamped in `BatteryFloorValidator`; jqwik property test `malformedTargetSocNeverThrows` (1,000 trials) | **CLOSED** |
+| **F-05** | MAJOR | ROBUSTNESS | `be5c563` (C5) | Optional route handling in `AssignmentValidator` emits `ROUTE_UNAVAILABLE`; Mutation 17 | **CLOSED** |
+| **F-06** | MAJOR | CORRECTNESS | `40f3536` (C2) & `442ccea` (C6) | `ChargerStatus` and `OutageWindow` interval sweeps in `ChargerCapacityValidator`; Mutations 18–20 | **CLOSED** |
+| **F-07** | MAJOR | SOUNDNESS | `08a2c81` (C7) | `checkTripCompleteness` validates trip partition against `ValidationInput`; Mutations 21–23 | **CLOSED** |
+| **F-08** | MAJOR | DETERMINISM | `c6cc6e0` (C8) | `PlanValidator.VIOLATION_ORDER` comparator + `.distinct()`; `PlanValidatorDeterminismTest` (200 trials) | **CLOSED** |
+| **F-09** | MAJOR | SOUNDNESS | `72bb738` (C9) | `TariffCostValidator` independent micro-unit walk; `TariffCostValidatorDifferentialTest` (500 sessions + DST); Mutation 24 | **CLOSED** |
+| **F-10** | MINOR | CODE QUALITY | `e4cabba` (C10) | Split long methods in `TripTimingValidator`, `AssignmentValidator`, `BatteryFloorValidator` (< 35 LOC) | **CLOSED** |
+| **F-11** | MINOR | TESTING | `e4cabba` (C10) | `ConstantConsumptionModelTest` added with independently hand-computed golden constants | **CLOSED** |
+| **F-12** | MAJOR | GATE | `6bc2d27` (C11) | `jacoco:check` active in verify across validator (92.34% line / 85.90% branch), planner (100%), service (100%) | **CLOSED** |
+| **F-13** | BLOCKER | TRUST MODEL | `d6779a0` (C3) | Decision D1; `ValidationInput` introduced as mandatory independent ground-truth parameter | **CLOSED** |
+| **F-14** | MAJOR | SPEC | `40f3536` (C2) | Domain models updated with `TenantId` and `OutageWindow`; tested across domain and validator | **CLOSED** |
+| **F-15** | MAJOR | ROBUSTNESS | `d6779a0` (C3) | Top-level totality guard in `PlanValidator` fails closed emitting `VALIDATOR_INTERNAL_ERROR` | **CLOSED** |
+| **F-16** | MAJOR | CORRECTNESS | `442ccea` (C6) | Physical plug double-booking detection emitting `CHARGER_DOUBLE_BOOKED`; Mutation 20 | **CLOSED** |
+| **F-17** | MAJOR | GATE | `c1e321e` (C1) | Greps added for `@Disabled`, `@Ignore`, empty catch blocks, `Instant.now()`, `LocalDateTime`, `TODO` | **CLOSED** |
+| **F-18** | MINOR | DOCS | (C12) | Created root `README.md` documenting architecture, non-negotiable invariants, and verification gates | **CLOSED** |
+
+

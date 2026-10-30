@@ -14,3 +14,9 @@ Decisions not covered in `docs/ARCHITECTURE.md` are recorded here (one line: dec
 | 2026-10-30 | Charger capacity validated via continuous event-sweep with [start, end) intervals | Decouples validator from discrete 60s planner grid and prevents concurrent plug oversubscription |
 | 2026-10-30 | Decompose validator into modular check components per invariant (H1-H6) | Avoids god classes, maintains single responsibility, and guarantees methods stay under 40 lines |
 | 2026-10-30 | Domain entities permit unvalidated candidate states for validator inspection | Allows candidate plans with timing or overlap issues to be evaluated and reported rather than throwing in constructors |
+| 2026-10-30 | D1: Trust model via independent `ValidationInput` ground truth | Validator must never trust candidate claims for capacities, distances, tariffs, power, or charger counts |
+| 2026-10-30 | D2: Recompute and strictly verify SoC claims (`CLAIMED_SOC_MISMATCH`) | Energy conservation requires exact integer Wh matching between candidate claims and recomputed timeline |
+| 2026-10-30 | D3: Tenancy enforcement on all domain entities (`TENANT_MISMATCH`) | Prevents cross-tenant entity leakage across vehicles, trips, hubs, chargers, and unassigned trips |
+| 2026-10-30 | D4: Charger availability, outage windows, and plug double-booking checks | Enforces physical charger status, half-open outage intervals, and single-session-per-plug invariant |
+| 2026-10-30 | D5: Totality guard in `PlanValidator` failing closed (`VALIDATOR_INTERNAL_ERROR`) | Validator must never crash caller on unexpected runtime exceptions; fails closed with invalid report |
+| 2026-10-30 | D6: Deterministic violation ordering and deduplication | Comparator sorts by rule, vehicle, trip, hub, time, message to guarantee identical outputs across permutations |
