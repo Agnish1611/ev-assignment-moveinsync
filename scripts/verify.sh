@@ -108,20 +108,30 @@ echo "✓ Log and PII hygiene check passed."
 
 # 5. Integration tests (if docker/testcontainers available)
 echo "[Step 5/6] Checking integration test environment..."
+IT_FILES=$(find . -name "*IT.java" -not -path "*/target/*" 2>/dev/null || true)
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    echo "Docker is running. Integration tests executed during verify."
+    echo "✓ Docker is running. Container-backed integration tests enabled."
+    echo "✓ Integration test check passed."
 else
-    echo "Note: Docker not currently reachable; container-backed integration tests will run in CI."
+    if [[ -n "$IT_FILES" ]]; then
+        echo "ERROR: Integration tests (*IT.java) exist but Docker is unreachable!"
+        echo "Found integration test files:"
+        echo "$IT_FILES"
+        exit 1
+    else
+        echo "[-] Integration tests [SKIPPED: No *IT.java files exist and Docker is unreachable locally; container-backed integration tests will run in CI]"
+    fi
 fi
-echo "✓ Integration test check passed."
 
 # 6. Release-candidate benchmark run check
 echo "[Step 6/6] Release-candidate status check..."
 if [[ "${RELEASE_CANDIDATE:-false}" == "true" ]]; then
     echo "Running release-candidate 300-cab benchmark verification..."
     ./mvnw -q test -pl ev-sim -Dtest=BenchmarkScenarioTest
+    echo "✓ Release-candidate check passed."
+else
+    echo "[-] Release-candidate benchmark [SKIPPED: RELEASE_CANDIDATE not set to true]"
 fi
-echo "✓ Release-candidate check passed."
 
 echo "================================================================"
 echo " ALL CHECKS PASSED: verify.sh completed successfully."
