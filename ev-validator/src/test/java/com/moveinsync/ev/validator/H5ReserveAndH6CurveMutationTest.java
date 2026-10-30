@@ -135,7 +135,7 @@ class H5ReserveAndH6CurveMutationTest extends ValidatorMutationTestFixture {
 
     ChargingSession inflatedSession =
         new ChargingSession(
-            "SESS-INFLATED",
+            "SESS-INFLATED-1WH",
             cab1.id(),
             hub1.id(),
             charger1.id(),
@@ -178,6 +178,7 @@ class H5ReserveAndH6CurveMutationTest extends ValidatorMutationTestFixture {
 
     ValidationReport report = validator.validate(baseInput(mutatedPlan), mutatedPlan);
     assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.H6_CHARGING_CURVE)).isNotEmpty();
     assertThat(report.violationsFor(RuleId.CLAIMED_SOC_MISMATCH)).isNotEmpty();
   }
 }

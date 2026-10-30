@@ -3,6 +3,7 @@ package com.moveinsync.ev.domain.consumption;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.moveinsync.ev.domain.tenant.TenantId;
 import com.moveinsync.ev.domain.vehicle.Vehicle;
 import com.moveinsync.ev.domain.vehicle.VehicleId;
 import java.time.Instant;
@@ -14,7 +15,8 @@ import org.junit.jupiter.api.Test;
  */
 class ConstantConsumptionModelTest {
 
-  private final Vehicle cab = new Vehicle(VehicleId.of("CAB-01"), 60_000L, 150L, 50);
+  private final Vehicle cab =
+      new Vehicle(TenantId.of("tenant-fixture"), VehicleId.of("CAB-01"), 60_000L, 150L, 50);
 
   @Test
   @DisplayName(
@@ -98,7 +100,8 @@ class ConstantConsumptionModelTest {
     // energyWh = (310,643,750,000 + 100,000,000 - 1) / 100,000,000
     //          = 310,743,749,999 / 100,000,000
     //          = 3,107 Wh
-    Vehicle customCab = new Vehicle(VehicleId.of("CAB-GOLD"), 75_000L, 175L, 60);
+    Vehicle customCab =
+        new Vehicle(TenantId.of("tenant-fixture"), VehicleId.of("CAB-GOLD"), 75_000L, 175L, 60);
     ConstantConsumptionModel model = new ConstantConsumptionModel(12_500, 11_500);
 
     long energy =

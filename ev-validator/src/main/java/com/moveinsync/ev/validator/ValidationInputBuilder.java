@@ -28,7 +28,7 @@ import java.util.Objects;
  */
 public class ValidationInputBuilder {
 
-  private TenantId tenantId = TenantId.of("default");
+  private TenantId tenantId;
   private Instant horizonStart;
   private Instant horizonEnd;
   private final Map<VehicleId, Vehicle> vehicles = new HashMap<>();
@@ -152,6 +152,9 @@ public class ValidationInputBuilder {
   }
 
   public ValidationInput build() {
+    if (tenantId == null) {
+      throw new IllegalArgumentException("tenantId must be set");
+    }
     if (horizonStart == null) {
       horizonStart = Instant.EPOCH;
     }

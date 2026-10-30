@@ -1,6 +1,6 @@
 # Test Preservation and Reconciliation Report
 
-**Commit Reference:** `main` (`e27f343`) vs `HEAD` (`179544c`)  
+**Commit Reference:** `main` (`e27f343`) vs branch `fix/phase2-remediation` tip `b027d24` (working tree may be ahead of that commit; method locations below were checked in the tree).  
 **Scope:** Complete audit of test method preservation, mapping, assertion fidelity, and suite count reconciliation.
 
 ---
@@ -13,7 +13,7 @@
 > - In `ChargingCurveTest.java`, assertions were made strictly stronger by validating exact hand-derived integer seconds for fast (1,440s) and slow (720s) segments, as well as testing zero-capacity rejection and start SoC exceeding 80%.
 > - In `TariffWindowTest.java`, assertions were added to test null parameter rejection, 24-hour midnight boundary spans, negative cost calculation rejection, and inverted date range handling. Zero assertions were weakened or removed.
 
-Every test method present on `main` (`e27f343`) exists at `HEAD` with equal or stronger assertions. Zero tests were deleted, zero tests were `@Disabled` or `@Ignore`d, and zero assertions were loosened.
+`PlanValidatorTest.java` and `PlanValidatorMutationTest.java` were deleted. Their 18 methods were moved. Fifteen keep the same rule assertion. Three names changed. Two stimuli changed. `mutationInflateTargetSocBy1Wh` asserts `H6_CHARGING_CURVE` and also `CLAIMED_SOC_MISMATCH`. No method is `@Disabled` or `@Ignore`.
 
 ---
 
@@ -223,82 +223,65 @@ All 69 test methods and ArchUnit rules from `main` are tracked below to their ex
 | `PlanValidatorTest#batteryFloorViolationOnTrip` | Split/Decomposed | `PlanValidatorSmokeTest#batteryFloorViolationOnTrip` |
 | `PlanValidatorTest#chargerCapacityViolation` | Restored/Strengthened | `PlanValidatorTimingAndCapacityTest#chargerCapacityViolation` |
 | `PlanValidatorTest#tripTimingStartViolation` | Restored/Strengthened | `PlanValidatorTimingAndCapacityTest#tripTimingStartViolation` |
-| `PlanValidatorTest#doubleTripAssignmentViolation` | Split/Decomposed | `H4AssignmentMutationTest#doubleTripAssignmentViolation` |
-| `PlanValidatorTest#reserveToHubViolation` | Split/Decomposed | `H5ReserveAndH6CurveMutationTest#reserveToHubViolation` |
-| `PlanValidatorTest#chargingCurveDurationViolation` | Split/Decomposed | `H5ReserveAndH6CurveMutationTest#chargingCurveDurationViolation` |
+| `PlanValidatorTest#doubleTripAssignmentViolation` | Same assertions, moved | `PlanValidatorInvariantsTest#doubleTripAssignmentViolation` |
+| `PlanValidatorTest#reserveToHubViolation` | Same assertions, moved | `PlanValidatorInvariantsTest#reserveToHubViolation` |
+| `PlanValidatorTest#chargingCurveDurationViolation` | Same assertions, moved | `PlanValidatorInvariantsTest#chargingCurveDurationViolation` |
 | `PlanValidatorMutationTest#mutationShave1WhBelowFloorAtPickup` | Split/Decomposed | `H1BatteryFloorMutationTest#mutationShave1WhBelowFloorAtPickup` |
 | `PlanValidatorMutationTest#mutationShave1WhBelowFloorAtDropoff` | Split/Decomposed | `H1BatteryFloorMutationTest#mutationShave1WhBelowFloorAtDropoff` |
 | `PlanValidatorMutationTest#mutationOverlapSessionsBy1Second` | Split/Decomposed | `H2ChargerCapacityMutationTest#mutationOverlapSessionsBy1Second` |
 | `PlanValidatorMutationTest#mutationShiftPickupBy1SecondLate` | Split/Decomposed | `H3TripTimingMutationTest#mutationShiftPickupBy1SecondLate` |
 | `PlanValidatorMutationTest#mutationShiftPickupBy1SecondEarly` | Split/Decomposed | `H3TripTimingMutationTest#mutationShiftPickupBy1SecondEarly` |
 | `PlanValidatorMutationTest#mutationShiftDropoffPastDeadline` | Split/Decomposed | `H3TripTimingMutationTest#mutationShiftDropoffPastDeadline` |
-| `PlanValidatorMutationTest#mutationDoubleAssignTrip` | Split/Decomposed | `H4AssignmentMutationTest#mutationDoubleAssignTrip` |
-| `PlanValidatorMutationTest#mutationOverlapActivitiesOnSameCab` | Split/Decomposed | `H4AssignmentMutationTest#mutationOverlapActivitiesOnSameCab` |
-| `PlanValidatorMutationTest#mutationReserveToHubViolation` | Split/Decomposed | `H5ReserveAndH6CurveMutationTest#mutationReserveToHubViolation` |
+| `PlanValidatorMutationTest#mutationDoubleAssignTrip` | Renamed; same assertions | `H4AssignmentMutationTest#mutationDoubleAssignTripToTwoCabs` |
+| `PlanValidatorMutationTest#mutationOverlapActivitiesOnSameCab` | Renamed; stimulus changed | `H4AssignmentMutationTest#mutationOverlapActivitiesOnSameCabBy1Second` |
+| `PlanValidatorMutationTest#mutationReserveToHubViolation` | Renamed; stimulus changed | `H5ReserveAndH6CurveMutationTest#mutationShaveReserveToHubChargeBelowFloor` |
 | `PlanValidatorMutationTest#mutationShave1SecondFromChargingDuration` | Split/Decomposed | `H5ReserveAndH6CurveMutationTest#mutationShave1SecondFromChargingDuration` |
 | `PlanValidatorMutationTest#mutationInflateTargetSocBy1Wh` | Split/Decomposed | `H5ReserveAndH6CurveMutationTest#mutationInflateTargetSocBy1Wh` |
 
 ---
 
-## 5. Assertion Equivalence and Strengthening Proofs
+## 5. Side-by-side assertions for the 18 moved methods
 
-For every test that was moved or split during file decomposition (to enforce AGENTS.md rule 2.2 requiring classes under 300 LOC), the assertions were preserved verbatim or strengthened:
+`main` called `validator.validate(plan)`. The current tree calls `validator.validate(input, plan)` or `validator.validate(baseInput(mutatedPlan), mutatedPlan)`. The assertion lines below are the ones that decide pass or fail.
 
-### 5.1 `chargerCapacityViolation` (Restored)
-- **`main` (`e27f343`):**
-  ```java
-  ValidationReport report = validator.validate(plan);
-  assertThat(report.isValid()).isFalse();
-  assertThat(report.violationsFor(RuleId.H2_CHARGER_CAPACITY)).isNotEmpty();
-  ```
-- **`HEAD` (`PlanValidatorTimingAndCapacityTest.java`):**
-  ```java
-  ValidationReport report = validator.validate(input, plan);
-  assertThat(report.isValid()).isFalse();
-  assertThat(report.violationsFor(RuleId.H2_CHARGER_CAPACITY)).isNotEmpty();
-  ```
-- **Fidelity:** Equal assertion strength; enhanced with independent `ValidationInput` ground truth.
+| `main` method | Current method | `main` assertions | Current assertions |
+|---|---|---|---|
+| `PlanValidatorTest#validPlanValidation` | `PlanValidatorSmokeTest#validPlanValidation` | `isValid` true; `violationCount` 0; totals 1/1/1; `assertValid()` | same |
+| `PlanValidatorTest#batteryFloorViolationOnTrip` | `PlanValidatorSmokeTest#batteryFloorViolationOnTrip` | `isValid` false; `H1_BATTERY_FLOOR` not empty; `assertValid` throws `ValidationException` | same |
+| `PlanValidatorTest#chargerCapacityViolation` | `PlanValidatorTimingAndCapacityTest#chargerCapacityViolation` | `isValid` false; `H2_CHARGER_CAPACITY` not empty | same |
+| `PlanValidatorTest#tripTimingStartViolation` | `PlanValidatorTimingAndCapacityTest#tripTimingStartViolation` | `isValid` false; `H3_TRIP_TIMING` not empty | same |
+| `PlanValidatorTest#doubleTripAssignmentViolation` | `PlanValidatorInvariantsTest#doubleTripAssignmentViolation` | `isValid` false; `H4_DOUBLE_ASSIGNMENT` not empty | same |
+| `PlanValidatorTest#reserveToHubViolation` | `PlanValidatorInvariantsTest#reserveToHubViolation` | `isValid` false; `H5_RESERVE_TO_HUB` not empty | same |
+| `PlanValidatorTest#chargingCurveDurationViolation` | `PlanValidatorInvariantsTest#chargingCurveDurationViolation` | `isValid` false; `H6_CHARGING_CURVE` not empty | same |
+| `PlanValidatorMutationTest#mutationShave1WhBelowFloorAtPickup` | `H1BatteryFloorMutationTest#mutationShave1WhBelowFloorAtPickup` | `isValid` false; `H1_BATTERY_FLOOR` not empty | same |
+| `PlanValidatorMutationTest#mutationShave1WhBelowFloorAtDropoff` | `H1BatteryFloorMutationTest#mutationShave1WhBelowFloorAtDropoff` | `isValid` false; `H1_BATTERY_FLOOR` not empty | same |
+| `PlanValidatorMutationTest#mutationOverlapSessionsBy1Second` | `H2ChargerCapacityMutationTest#mutationOverlapSessionsBy1Second` | `isValid` false; `H2_CHARGER_CAPACITY` not empty | same |
+| `PlanValidatorMutationTest#mutationShiftPickupBy1SecondLate` | `H3TripTimingMutationTest#mutationShiftPickupBy1SecondLate` | `isValid` false; `H3_TRIP_TIMING` not empty | same |
+| `PlanValidatorMutationTest#mutationShiftPickupBy1SecondEarly` | `H3TripTimingMutationTest#mutationShiftPickupBy1SecondEarly` | `isValid` false; `H3_TRIP_TIMING` not empty | same |
+| `PlanValidatorMutationTest#mutationShiftDropoffPastDeadline` | `H3TripTimingMutationTest#mutationShiftDropoffPastDeadline` | `isValid` false; `H3_TRIP_TIMING` not empty | same |
+| `PlanValidatorMutationTest#mutationDoubleAssignTrip` | `H4AssignmentMutationTest#mutationDoubleAssignTripToTwoCabs` | `isValid` false; `H4_DOUBLE_ASSIGNMENT` not empty | same |
+| `PlanValidatorMutationTest#mutationOverlapActivitiesOnSameCab` | `H4AssignmentMutationTest#mutationOverlapActivitiesOnSameCabBy1Second` | `isValid` false; `H4_ASSIGNMENT_OVERLAP` not empty | same rule; stimulus changed |
+| `PlanValidatorMutationTest#mutationReserveToHubViolation` | `H5ReserveAndH6CurveMutationTest#mutationShaveReserveToHubChargeBelowFloor` | `isValid` false; `H5_RESERVE_TO_HUB` not empty | same rule; stimulus changed |
+| `PlanValidatorMutationTest#mutationShave1SecondFromChargingDuration` | `H5ReserveAndH6CurveMutationTest#mutationShave1SecondFromChargingDuration` | `isValid` false; `H6_CHARGING_CURVE` not empty | same |
+| `PlanValidatorMutationTest#mutationInflateTargetSocBy1Wh` | `H5ReserveAndH6CurveMutationTest#mutationInflateTargetSocBy1Wh` | `isValid` false; `H6_CHARGING_CURVE` not empty | `isValid` false; `H6_CHARGING_CURVE` not empty and `CLAIMED_SOC_MISMATCH` not empty |
 
-### 5.2 `tripTimingStartViolation` (Restored)
-- **`main` (`e27f343`):**
-  ```java
-  ValidationReport report = validator.validate(plan);
-  assertThat(report.isValid()).isFalse();
-  assertThat(report.violationsFor(RuleId.H3_TRIP_TIMING)).isNotEmpty();
-  ```
-- **`HEAD` (`PlanValidatorTimingAndCapacityTest.java`):**
-  ```java
-  ValidationReport report = validator.validate(input, plan);
-  assertThat(report.isValid()).isFalse();
-  assertThat(report.violationsFor(RuleId.H3_TRIP_TIMING)).isNotEmpty();
-  ```
-- **Fidelity:** Equal assertion strength; enhanced with independent `ValidationInput` ground truth.
+### 5.1 Stimulus that changed
 
-### 5.3 `ChargingCurveTest#chargingCrossing80PercentBoundary` (Strengthened)
-- **`main` (`e27f343`):**
-  ```java
-  assertThat(duration).isEqualTo(fastDuration + slowDuration);
-  ```
-- **`HEAD` (`ChargingCurveTest.java`):**
-  ```java
-  assertThat(fastDuration).isEqualTo(1_440L);
-  assertThat(slowDuration).isEqualTo(720L);
-  assertThat(duration).isEqualTo(2_160L);
-  ```
-- **Fidelity:** Strictly stronger; replaces relative equality with absolute first-principles integer constants derived from hand physics.
+`mutationOverlapActivitiesOnSameCab` on `main` put a charging session on the cab starting 1 second before dropoff (`SESS-OVERLAP-1`) and did not put `assign2` on the schedule. The current method overlaps two trip assignments by 1 second and does not insert a charging session. Both assert `H4_ASSIGNMENT_OVERLAP`.
 
-### 5.4 Mutation Suite (`H1BatteryFloorMutationTest`, etc.)
-- All 11 mutation tests from `PlanValidatorMutationTest.java` retain their exact 1-Wh shaving, 1-second shifting, and double-booking checks:
-  ```java
-  assertThat(report.isValid()).isFalse();
-  assertThat(report.violationsFor(RuleId.<INVARIANT>)).isNotEmpty();
-  ```
-- The decomposition was done solely to bring the 582-line `PlanValidatorMutationTest.java` and 461-line `PlanValidatorTest.java` into compliance with the 300 LOC rule.
+`mutationReserveToHubViolation` on `main` used dropoff SoC 9,749 Wh (1 Wh under 9,000 + 750). The current method uses an isolated dropoff and dropoff SoC 9,100 Wh. Both assert `H5_RESERVE_TO_HUB`.
+
+`mutationInflateTargetSocBy1Wh` asserts `H6_CHARGING_CURVE` and `CLAIMED_SOC_MISMATCH`. The session id is `SESS-INFLATED-1WH`. The current stimulus also includes a trip assignment, so the claimed-SoC rule fires in addition to the curve rule.
+
+### 5.2 `ChargingCurveTest#chargingCrossing80PercentBoundary`
+
+`main` asserted `duration == fastDuration + slowDuration`. The current test also asserts `fastDuration == 1_440`, `slowDuration == 720`, and `duration == 2_160`.
 
 ---
 
 ## 6. Conclusion
 
 - **Tests at `main`:** 69 total (44 domain, 2 planner, 22 validator, 1 service)
-- **Tests at `HEAD`:** 207 total (61 domain, 3 planner, 140 validator, 2 service, 1 bench)
-- **Net change:** +138 tests (+200% increase), 0 tests removed, 0 tests disabled, 0 assertions weakened.
+- **Files deleted:** `PlanValidatorTest.java` and `PlanValidatorMutationTest.java`
+- **18 methods:** mapped in section 5. The inflate-target method asserts `H6_CHARGING_CURVE` and also `CLAIMED_SOC_MISMATCH`. Two stimuli differ from `main`.
+- The milestone counts in section 2 were recorded at `b027d24` and were not re-counted in this repair.

@@ -3,6 +3,7 @@ package com.moveinsync.ev.domain.consumption;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.moveinsync.ev.domain.tenant.TenantId;
 import com.moveinsync.ev.domain.vehicle.Vehicle;
 import com.moveinsync.ev.domain.vehicle.VehicleId;
 import java.time.Instant;
@@ -13,7 +14,8 @@ import org.junit.jupiter.api.Test;
 
 class ConsumptionModelTest {
 
-  private final Vehicle cab = new Vehicle(VehicleId.of("CAB-01"), 60_000L, 160L, 50);
+  private final Vehicle cab =
+      new Vehicle(TenantId.of("tenant-fixture"), VehicleId.of("CAB-01"), 60_000L, 160L, 50);
 
   @Test
   @DisplayName("Base consumption calculation without traffic or AC")

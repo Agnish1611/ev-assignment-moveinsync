@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.moveinsync.ev.domain.location.Location;
+import com.moveinsync.ev.domain.tenant.TenantId;
 import java.time.ZoneId;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +16,7 @@ class HubAndChargerTest {
   @DisplayName("Hub construction and validation")
   void validHubCreation() {
     Location loc = Location.of("LOC-HUB-1", "Electronic City Hub");
-    Hub hub = Hub.of("HUB-1", "EC Hub 1", loc, ZoneId.of("Asia/Kolkata"), 10);
+    Hub hub = Hub.of("tenant-fixture", "HUB-1", "EC Hub 1", loc, ZoneId.of("Asia/Kolkata"), 10);
 
     assertThat(hub.id()).isEqualTo(HubId.of("HUB-1"));
     assertThat(hub.name()).isEqualTo("EC Hub 1");
@@ -25,7 +27,7 @@ class HubAndChargerTest {
   @Test
   @DisplayName("Charger effective power enforces min(charger kW, vehicle max kW)")
   void effectivePowerCalculation() {
-    Charger charger50Kw = Charger.of("CHG-1", "HUB-1", 50);
+    Charger charger50Kw = Charger.of("tenant-fixture", "CHG-1", "HUB-1", 50);
 
     // Case 1: Charger power < Vehicle max power (50 kW < 80 kW) -> 50 kW
     assertThat(charger50Kw.calculateEffectivePowerKw(80)).isEqualTo(50);
@@ -40,7 +42,7 @@ class HubAndChargerTest {
   @Test
   @DisplayName("Charger status transitions and availability")
   void chargerStatusTransitions() {
-    Charger charger = Charger.of("CHG-1", "HUB-1", 60);
+    Charger charger = Charger.of("tenant-fixture", "CHG-1", "HUB-1", 60);
     assertThat(charger.status()).isEqualTo(ChargerStatus.OPERATIONAL);
     assertThat(charger.status().isAvailable()).isTrue();
 
@@ -56,9 +58,17 @@ class HubAndChargerTest {
   @Test
   @DisplayName("Charger rejects negative power and null arguments")
   void chargerValidation() {
-    assertThatThrownBy(() -> Charger.of("CHG-1", "HUB-1", 0))
+    assertThatThrownBy(() -> Charger.of("tenant-fixture", "CHG-1", "HUB-1", 0))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new Charger(null, HubId.of("HUB-1"), 50, ChargerStatus.OPERATIONAL))
+    assertThatThrownBy(
+            () ->
+                new Charger(
+                    TenantId.of("tenant-fixture"),
+                    null,
+                    HubId.of("HUB-1"),
+                    50,
+                    ChargerStatus.OPERATIONAL,
+                    List.of()))
         .isInstanceOf(NullPointerException.class);
   }
 }

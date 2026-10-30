@@ -37,20 +37,6 @@ public record Charger(
     outageWindows = Collections.unmodifiableList(new ArrayList<>(outageWindows));
   }
 
-  public Charger(ChargerId id, HubId hubId, int powerKw, ChargerStatus status) {
-    this(TenantId.of("default"), id, hubId, powerKw, status, List.of());
-  }
-
-  public static Charger of(String id, String hubId, int powerKw) {
-    return new Charger(
-        TenantId.of("default"),
-        ChargerId.of(id),
-        HubId.of(hubId),
-        powerKw,
-        ChargerStatus.OPERATIONAL,
-        List.of());
-  }
-
   public static Charger of(String tenantId, String id, String hubId, int powerKw) {
     return new Charger(
         TenantId.of(tenantId),

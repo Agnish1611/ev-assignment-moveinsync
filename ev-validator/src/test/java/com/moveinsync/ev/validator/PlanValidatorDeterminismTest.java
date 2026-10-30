@@ -66,14 +66,14 @@ class PlanValidatorDeterminismTest {
     locA = Location.of("LOC-A", "Location A");
     locB = Location.of("LOC-B", "Location B");
 
-    hub1 = Hub.of("HUB-1", "Hub 1", hub1Loc, ZoneId.of("Asia/Kolkata"), 1);
-    hub2 = Hub.of("HUB-2", "Hub 2", hub2Loc, ZoneId.of("Asia/Kolkata"), 1);
-    chg1 = Charger.of("CHG-1", "HUB-1", 50);
-    chg2 = Charger.of("CHG-2", "HUB-2", 50);
+    hub1 = Hub.of("tenant-1", "HUB-1", "Hub 1", hub1Loc, ZoneId.of("Asia/Kolkata"), 1);
+    hub2 = Hub.of("tenant-1", "HUB-2", "Hub 2", hub2Loc, ZoneId.of("Asia/Kolkata"), 1);
+    chg1 = Charger.of("tenant-1", "CHG-1", "HUB-1", 50);
+    chg2 = Charger.of("tenant-1", "CHG-2", "HUB-2", 50);
 
-    cab1 = new Vehicle(VehicleId.of("CAB-01"), 60_000L, 150L, 50);
-    cab2 = new Vehicle(VehicleId.of("CAB-02"), 60_000L, 150L, 50);
-    cab3 = new Vehicle(VehicleId.of("CAB-03"), 60_000L, 150L, 50);
+    cab1 = new Vehicle(TenantId.of("tenant-1"), VehicleId.of("CAB-01"), 60_000L, 150L, 50);
+    cab2 = new Vehicle(TenantId.of("tenant-1"), VehicleId.of("CAB-02"), 60_000L, 150L, 50);
+    cab3 = new Vehicle(TenantId.of("tenant-1"), VehicleId.of("CAB-03"), 60_000L, 150L, 50);
 
     Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
     trip1 = makeTrip("T1", t0.plusSeconds(600), t0.plusSeconds(3600), "E1");
@@ -99,7 +99,8 @@ class PlanValidatorDeterminismTest {
   }
 
   private Trip makeTrip(String id, Instant start, Instant latestFinish, String emp) {
-    return new Trip(TripId.of(id), start, locA, locB, 10_000, 1200, latestFinish, emp);
+    return new Trip(
+        TenantId.of("tenant-1"), TripId.of(id), start, locA, locB, 10_000, 1200, latestFinish, emp);
   }
 
   private static TripAssignment makeAssign(Trip trip, VehicleId cab, Instant actualPickup) {

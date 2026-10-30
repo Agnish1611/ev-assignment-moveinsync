@@ -27,6 +27,9 @@ jobs:
           chmod +x mvnw
           chmod +x scripts/verify.sh
 
+      - name: Grep gate self-test
+        run: ./scripts/verify.sh --self-test
+
       - name: Run verification gate
         run: ./scripts/verify.sh
 

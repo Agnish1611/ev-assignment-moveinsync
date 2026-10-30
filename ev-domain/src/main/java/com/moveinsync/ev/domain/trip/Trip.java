@@ -70,27 +70,6 @@ public record Trip(
     }
   }
 
-  public Trip(
-      TripId id,
-      Instant startTs,
-      Location fromLocation,
-      Location toLocation,
-      int distanceMeters,
-      int estimatedDurationSeconds,
-      Instant latestFinishTs,
-      String employeeRef) {
-    this(
-        TenantId.of("default"),
-        id,
-        startTs,
-        fromLocation,
-        toLocation,
-        distanceMeters,
-        estimatedDurationSeconds,
-        latestFinishTs,
-        employeeRef);
-  }
-
   /**
    * Calculates the planned dropoff instant (pickup time plus estimated duration).
    *

@@ -59,7 +59,7 @@ class ValidatorSubEngineCoverageTest {
         .isZero();
 
     Location loc = Location.of("LOC-1", "Hub 1 Loc");
-    Hub hub = Hub.of("HUB-1", "Hub 1", loc, ZoneId.of("Asia/Kolkata"), 1);
+    Hub hub = Hub.of("tenant-1", "HUB-1", "Hub 1", loc, ZoneId.of("Asia/Kolkata"), 1);
     ValidationInput inputWithLocalTariff =
         ValidationInput.builder()
             .tenantId(TenantId.of("tenant-1"))
@@ -87,13 +87,14 @@ class ValidatorSubEngineCoverageTest {
     Location pickupLoc = Location.of("LOC-PICK", "Pick");
     Location dropLoc = Location.of("LOC-DROP", "Drop");
 
-    Hub hub = Hub.of("HUB-1", "Hub", hubLoc, ZoneId.of("Asia/Kolkata"), 1);
-    Charger chg = Charger.of("CHG-1", "HUB-1", 50);
-    Vehicle cab = new Vehicle(VehicleId.of("CAB-01"), 60_000L, 150L, 50);
+    Hub hub = Hub.of("tenant-1", "HUB-1", "Hub", hubLoc, ZoneId.of("Asia/Kolkata"), 1);
+    Charger chg = Charger.of("tenant-1", "CHG-1", "HUB-1", 50);
+    Vehicle cab = new Vehicle(TenantId.of("tenant-1"), VehicleId.of("CAB-01"), 60_000L, 150L, 50);
 
     Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
     Trip trip =
         new Trip(
+            TenantId.of("tenant-1"),
             TripId.of("T1"),
             t0.plusSeconds(600),
             pickupLoc,
@@ -157,9 +158,9 @@ class ValidatorSubEngineCoverageTest {
   @DisplayName("BatteryFloorValidator initial SoC below floor produces H1_BATTERY_FLOOR")
   void initialSocBelowFloor() {
     Location hubLoc = Location.of("LOC-HUB", "Hub");
-    Hub hub = Hub.of("HUB-1", "Hub", hubLoc, ZoneId.of("Asia/Kolkata"), 1);
-    Charger chg = Charger.of("CHG-1", "HUB-1", 50);
-    Vehicle cab = new Vehicle(VehicleId.of("CAB-01"), 60_000L, 150L, 50);
+    Hub hub = Hub.of("tenant-1", "HUB-1", "Hub", hubLoc, ZoneId.of("Asia/Kolkata"), 1);
+    Charger chg = Charger.of("tenant-1", "CHG-1", "HUB-1", 50);
+    Vehicle cab = new Vehicle(TenantId.of("tenant-1"), VehicleId.of("CAB-01"), 60_000L, 150L, 50);
 
     ValidationContext ctx =
         ValidationContext.builder()

@@ -47,8 +47,8 @@ abstract class ValidatorMutationTestFixture {
     pickupLoc = Location.of("LOC-PICKUP", "Pickup A");
     dropoffLoc = Location.of("LOC-DROPOFF", "Dropoff B");
 
-    hub1 = Hub.of("HUB-1", "North Hub", hub1Loc, ZoneId.of("Asia/Kolkata"), 1);
-    charger1 = Charger.of("CHG-1", "HUB-1", 50);
+    hub1 = Hub.of("tenant-1", "HUB-1", "North Hub", hub1Loc, ZoneId.of("Asia/Kolkata"), 1);
+    charger1 = Charger.of("tenant-1", "CHG-1", "HUB-1", 50);
 
     cab1 = new Vehicle(TenantId.of("tenant-1"), VehicleId.of("CAB-01"), 60_000L, 150L, 50);
     cab2 = new Vehicle(TenantId.of("tenant-1"), VehicleId.of("CAB-02"), 60_000L, 150L, 50);

@@ -33,9 +33,10 @@ class SocSessionClaimMismatchValidatorTest {
   private final TenantId tenant = TenantId.of("tenant-1");
   private final Location hubLoc = Location.of("LOC-HUB", "Hub Loc");
 
-  private final Hub hub = Hub.of("HUB-1", "Main Hub", hubLoc, ZoneId.of("UTC"), 1);
-  private final Charger charger = Charger.of("CHG-1", "HUB-1", 50);
-  private final Vehicle cab = new Vehicle(VehicleId.of("CAB-01"), 60_000L, 150L, 50);
+  private final Hub hub = Hub.of("tenant-1", "HUB-1", "Main Hub", hubLoc, ZoneId.of("UTC"), 1);
+  private final Charger charger = Charger.of("tenant-1", "CHG-1", "HUB-1", 50);
+  private final Vehicle cab =
+      new Vehicle(TenantId.of("tenant-1"), VehicleId.of("CAB-01"), 60_000L, 150L, 50);
 
   private final DistanceProvider distanceProvider = new ConstantSpeedDistanceProvider(5000, 10);
   private final ConstantConsumptionModel consumptionModel = new ConstantConsumptionModel();

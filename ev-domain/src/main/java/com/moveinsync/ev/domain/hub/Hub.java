@@ -37,15 +37,6 @@ public record Hub(
     }
   }
 
-  public Hub(HubId id, String name, Location location, ZoneId timeZone, int chargerCount) {
-    this(TenantId.of("default"), id, name, location, timeZone, chargerCount);
-  }
-
-  public static Hub of(
-      String id, String name, Location location, ZoneId timeZone, int chargerCount) {
-    return new Hub(TenantId.of("default"), HubId.of(id), name, location, timeZone, chargerCount);
-  }
-
   public static Hub of(
       String tenantId,
       String id,

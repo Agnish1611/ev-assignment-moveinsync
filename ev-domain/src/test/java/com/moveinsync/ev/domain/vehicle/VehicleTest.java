@@ -3,6 +3,7 @@ package com.moveinsync.ev.domain.vehicle;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.moveinsync.ev.domain.tenant.TenantId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +13,7 @@ class VehicleTest {
   @DisplayName("Vehicle construction with valid parameters creates an immutable record")
   void validVehicleCreation() {
     VehicleId id = VehicleId.of("CAB-001");
-    Vehicle vehicle = new Vehicle(id, 60_000L, 160L, 50);
+    Vehicle vehicle = new Vehicle(TenantId.of("tenant-fixture"), id, 60_000L, 160L, 50);
 
     assertThat(vehicle.id()).isEqualTo(id);
     assertThat(vehicle.batteryCapacityWh()).isEqualTo(60_000L);
@@ -25,16 +26,18 @@ class VehicleTest {
   void invalidParametersThrowException() {
     VehicleId id = VehicleId.of("CAB-001");
 
-    assertThatThrownBy(() -> new Vehicle(null, 60_000L, 160L, 50))
+    assertThatThrownBy(() -> new Vehicle(null, id, 60_000L, 160L, 50))
+        .isInstanceOf(NullPointerException.class);
+    assertThatThrownBy(() -> new Vehicle(TenantId.of("tenant-fixture"), null, 60_000L, 160L, 50))
         .isInstanceOf(NullPointerException.class);
 
-    assertThatThrownBy(() -> new Vehicle(id, 0L, 160L, 50))
+    assertThatThrownBy(() -> new Vehicle(TenantId.of("tenant-fixture"), id, 0L, 160L, 50))
         .isInstanceOf(IllegalArgumentException.class);
 
-    assertThatThrownBy(() -> new Vehicle(id, 60_000L, 0L, 50))
+    assertThatThrownBy(() -> new Vehicle(TenantId.of("tenant-fixture"), id, 60_000L, 0L, 50))
         .isInstanceOf(IllegalArgumentException.class);
 
-    assertThatThrownBy(() -> new Vehicle(id, 60_000L, 160L, 0))
+    assertThatThrownBy(() -> new Vehicle(TenantId.of("tenant-fixture"), id, 60_000L, 160L, 0))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
@@ -42,11 +45,13 @@ class VehicleTest {
   @DisplayName("Standard 15% floor calculation rounds up conservatively")
   void standardFloorCalculation() {
     // 60,000 Wh * 15% = 9,000 Wh exactly
-    Vehicle vehicle1 = new Vehicle(VehicleId.of("CAB-1"), 60_000L, 150L, 50);
+    Vehicle vehicle1 =
+        new Vehicle(TenantId.of("tenant-fixture"), VehicleId.of("CAB-1"), 60_000L, 150L, 50);
     assertThat(vehicle1.calculateStandardFloorWh()).isEqualTo(9_000L);
 
     // 60,001 Wh * 15% = 9,000.15 Wh -> rounds UP to 9,001 Wh
-    Vehicle vehicle2 = new Vehicle(VehicleId.of("CAB-2"), 60_001L, 150L, 50);
+    Vehicle vehicle2 =
+        new Vehicle(TenantId.of("tenant-fixture"), VehicleId.of("CAB-2"), 60_001L, 150L, 50);
     assertThat(vehicle2.calculateStandardFloorWh()).isEqualTo(9_001L);
   }
 
@@ -54,11 +59,13 @@ class VehicleTest {
   @DisplayName("Robust 18% floor calculation rounds up conservatively")
   void robustFloorCalculation() {
     // 50,000 Wh * 18% = 9,000 Wh exactly
-    Vehicle vehicle1 = new Vehicle(VehicleId.of("CAB-1"), 50_000L, 150L, 50);
+    Vehicle vehicle1 =
+        new Vehicle(TenantId.of("tenant-fixture"), VehicleId.of("CAB-1"), 50_000L, 150L, 50);
     assertThat(vehicle1.calculateRobustFloorWh()).isEqualTo(9_000L);
 
     // 50,001 Wh * 18% = 9,000.18 Wh -> rounds UP to 9,001 Wh
-    Vehicle vehicle2 = new Vehicle(VehicleId.of("CAB-2"), 50_001L, 150L, 50);
+    Vehicle vehicle2 =
+        new Vehicle(TenantId.of("tenant-fixture"), VehicleId.of("CAB-2"), 50_001L, 150L, 50);
     assertThat(vehicle2.calculateRobustFloorWh()).isEqualTo(9_001L);
   }
 

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.moveinsync.ev.domain.hub.ChargerId;
 import com.moveinsync.ev.domain.hub.HubId;
 import com.moveinsync.ev.domain.location.Location;
+import com.moveinsync.ev.domain.tenant.TenantId;
 import com.moveinsync.ev.domain.trip.Trip;
 import com.moveinsync.ev.domain.trip.TripId;
 import com.moveinsync.ev.domain.vehicle.Vehicle;
@@ -17,7 +18,7 @@ import org.junit.jupiter.api.Test;
 class ScheduleAndPlanTest {
 
   private final VehicleId cabId = VehicleId.of("CAB-01");
-  private final Vehicle cab = new Vehicle(cabId, 60_000L, 160L, 50);
+  private final Vehicle cab = new Vehicle(TenantId.of("tenant-fixture"), cabId, 60_000L, 160L, 50);
   private final Location depot = Location.of("LOC-DEPOT", "Depot");
   private final Location locA = Location.of("LOC-A", "Pickup A");
   private final Location locB = Location.of("LOC-B", "Dropoff B");
@@ -69,7 +70,17 @@ class ScheduleAndPlanTest {
     Instant t12 = Instant.parse("2026-10-30T12:00:00Z");
     Instant t13 = Instant.parse("2026-10-30T13:00:00Z");
 
-    Trip trip1 = new Trip(TripId.of("T1"), t10, locA, locB, 10_000, 1800, t11, "EMP-101");
+    Trip trip1 =
+        new Trip(
+            TenantId.of("tenant-fixture"),
+            TripId.of("T1"),
+            t10,
+            locA,
+            locB,
+            10_000,
+            1800,
+            t11,
+            "EMP-101");
     TripAssignment assign1 =
         new TripAssignment(
             trip1, cabId, t10, t10.plusSeconds(1800), 5000, 600, 800L, 40_000L, 35_000L);
@@ -103,6 +114,7 @@ class ScheduleAndPlanTest {
 
     Trip trip1 =
         new Trip(
+            TenantId.of("tenant-fixture"),
             TripId.of("T1"),
             Instant.parse("2026-10-30T09:00:00Z"),
             locA,
@@ -141,6 +153,7 @@ class ScheduleAndPlanTest {
 
     Trip unassignedTrip =
         new Trip(
+            TenantId.of("tenant-fixture"),
             TripId.of("T-BACKUP"),
             Instant.parse("2026-10-30T14:00:00Z"),
             locA,

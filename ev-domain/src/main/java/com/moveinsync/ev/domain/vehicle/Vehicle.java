@@ -48,11 +48,6 @@ public record Vehicle(
     }
   }
 
-  public Vehicle(
-      VehicleId id, long batteryCapacityWh, long baseConsumptionWhPerKm, int maxChargeKw) {
-    this(TenantId.of("default"), id, batteryCapacityWh, baseConsumptionWhPerKm, maxChargeKw);
-  }
-
   /**
    * Calculates the minimum required battery energy in Watt-hours for a given floor percentage.
    *

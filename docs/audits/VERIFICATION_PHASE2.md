@@ -4,7 +4,7 @@
 **Base Commit:** `e27f343` (`main`)  
 **Head Commit:** `56bf883`  
 **Date:** 2026-10-30  
-**Status:** ALL GATES PASSED (100% Green, 0 Suppressions, 0 Weakened Tests)
+**Status:** Superseded for PIT, history, and check deletion by `docs/audits/PHASE2_CLOSURE.md`.
 
 ---
 
@@ -486,12 +486,10 @@ All quality gates are firmly satisfied.
 ### 12.1 Merge Blockers Verification (Part A)
 
 #### A.1: Validate Signatures and Public API Audit
-Running `grep -rn "validate(" --include="*.java" .` confirms that **only one single public `validate` method exists** across the entire codebase:
-- `com.moveinsync.ev.validator.PlanValidator#validate(ValidationInput input, FleetPlan candidate)`: Returns `ValidationReport`.
-- All other `validate(` methods are package-private internal engine helpers (`AssignmentValidator`, `BatteryFloorValidator`, `ChargerCapacityValidator`, `ChargingCurveValidator`, `ReserveToHubValidator`, `TariffCostValidator`, `TripTimingValidator`). Zero overloaded shims or legacy signatures exist.
+Correction of the earlier single-signature claim: that claim is false for every commit from `d6779a0` through `d6a23c9` inclusive. At each of those commits `PlanValidator` exposed both `validate(ValidationInput, FleetPlan)` and `validate(FleetPlan)`, `PlanValidator(ValidationContext)` existed, and `ValidationContext` had a public constructor. `a1c9be4` removed `validate(FleetPlan)` and `PlanValidator(ValidationContext)`. After that commit the only public entry point is `PlanValidator#validate(ValidationInput, FleetPlan)`. Package-private `validate` helpers remain on the check classes.
 - `git diff --stat main..HEAD -- ev-domain/src/test ev-validator/src/test ev-service ev-sim ev-planner-core`:
   Only one pre-existing test was modified: `ChargingCurveTest.java` (6 lines changed, adding exact hand-calculated assertions `1,440s` fast and `720s` slow).
-- Pre-existing tests compile cleanly because `TenantId` offers factory defaults (`TenantId.of(...)`), while entity constructors and factories preserve standard parameter signatures.
+- The sentence that pre-existing tests compile because constructors default the tenant is obsolete. `Vehicle`, `Trip`, `Hub`, and `Charger` no longer expose a public constructor or factory that omits `TenantId` or substitutes a sentinel tenant. Test fixtures pass an explicit tenant.
 
 #### A.2: Decisions Log Verbatim & Decision D16 Explanation
 The decisions recorded in `docs/DECISIONS.md` include:
@@ -643,7 +641,7 @@ Tested in `ValidationOverflowProbeTest`:
 6. Extreme fleet maxima ($1,000\text{ km}$ legs, $250\text{ kWh}$ battery, $350\text{ kW}$ DC fast charger): evaluates cleanly without error.
 
 #### B.14: Documentation Hygiene
-- All absolute paths (`/Users/agnish/...`) stripped from committed `docs/audits/*` files and replaced with relative links.
+- Home-directory paths were stripped from committed `docs/audits/*` files and replaced with relative links.
 - `docs/audits/FINDING_MAP.md` updated with exact class and method names.
 
 ---
@@ -689,7 +687,7 @@ This section documents the final verification and evidence for all 12 checklist 
 
 ## 1. Test Suite Preservation and Reconciliation
 
-A dedicated comprehensive audit document has been committed to [`docs/audits/TEST_PRESERVATION.md`](file://docs/audits/TEST_PRESERVATION.md).
+A dedicated comprehensive audit document has been committed to [TEST_PRESERVATION.md](TEST_PRESERVATION.md).
 
 ### 1.1 Suite Count Reconciliation Across Milestones
 | Module | `main` (`e27f343`) | Post-Audit (`56bf883`) | `HEAD` (Current) | Surefire Executions (`HEAD`) |
@@ -705,7 +703,7 @@ A dedicated comprehensive audit document has been committed to [`docs/audits/TES
 ### 1.2 Preservation and Restoration
 1. **Restored Tests:** Both `chargerCapacityViolation()` and `tripTimingStartViolation()` from `main` have been fully restored and strengthened with `ValidationInput` in `PlanValidatorTimingAndCapacityTest.java`.
 2. **Correction of Prior Claim:** The Phase 2 audit claim that *"only `ChargingCurveTest` was modified"* was false. `TariffWindowTest.java` was also modified; in both files, assertions were added/strengthened with zero assertion deletions or loosenings.
-3. **Equivalence Proof:** Every test from `main` exists at `HEAD` with equal or stronger assertions (see [`TEST_PRESERVATION.md`](file://docs/audits/TEST_PRESERVATION.md) for full method-by-method assertion diffs).
+3. **Equivalence Proof:** The 18 `main` methods from `PlanValidatorTest` and `PlanValidatorMutationTest` are mapped to named HEAD methods with assertion text side by side in [TEST_PRESERVATION.md](TEST_PRESERVATION.md). Three names changed. Two stimuli changed. The rule-id assertions were kept.
 
 ---
 
@@ -718,54 +716,54 @@ Across the remediation branch, changes to production classes were audited:
 
 ### 2.2 Physics Derivation: 65,001 Wh vs 65,008 Wh in `IndependentGoldenPhysicsTest`
 - **Battery Capacity:** $75,000$ Wh.
-- **Fast Threshold (80%):** $75,000 	imes 0.80 = 60,000$ Wh.
+- **Fast Threshold (80%):** $75,000 \times 0.80 = 60,000$ Wh.
 - **Charger Power:** $60$ kW ($60,000$ W).
-- **Fast Segment Rate ($\le 80\%$):** $60	ext{ kW} / 3600	ext{ s} = rac{50}{3}	ext{ Wh/s}$.
-- **Slow Segment Rate ($> 80\%$):** $50\%$ of $60	ext{ kW} = 30	ext{ kW} / 3600	ext{ s} = rac{25}{3}	ext{ Wh/s}$.
+- **Fast Segment Rate ($\le 80\%$):** $60\text{ kW} / 3600\text{ s} = \frac{50}{3}\text{ Wh/s}$.
+- **Slow Segment Rate ($> 80\%$):** $50\%$ of $60\text{ kW} = 30\text{ kW} / 3600\text{ s} = \frac{25}{3}\text{ Wh/s}$.
 
 Starting at $50,000$ Wh to reach $60,000$ Wh:
-$$	ext{Fast Duration} = \lceil rac{10,000 	imes 3600}{60,000} ceil = 600	ext{ s}.$$
-Energy delivered in fast segment $= 600 	imes rac{50}{3} = 10,000$ Wh. Ending SoC $= 60,000$ Wh.
+$$\text{Fast Duration} = \lceil \frac{10,000 \times 3600}{60,000} \rceil = 600\text{ s}.$$
+Energy delivered in fast segment $= 600 \times \frac{50}{3} = 10,000$ Wh. Ending SoC $= 60,000$ Wh.
 
 To reach a target above $60,000$ Wh in the slow segment:
 If desired target is $65,001$ Wh:
-$$	ext{Slow Energy Needed} = 65,001 - 60,000 = 5,001	ext{ Wh}.$$
-$$	ext{Slow Duration} = \lceil rac{5,001 	imes 3600}{30,000} ceil = \lceil rac{5,001 	imes 36}{300} ceil = \lceil 600.12 ceil = 601	ext{ seconds}.$$
-$$	ext{Total Duration} = 600 + 601 = 1,201	ext{ seconds}.$$
+$$\text{Slow Energy Needed} = 65,001 - 60,000 = 5,001\text{ Wh}.$$
+$$\text{Slow Duration} = \lceil \frac{5,001 \times 3600}{30,000} \rceil = \lceil \frac{5,001 \times 36}{300} \rceil = \lceil 600.12 \rceil = 601\text{ seconds}.$$
+$$\text{Total Duration} = 600 + 601 = 1,201\text{ seconds}.$$
 
 Now, computing energy actually delivered over $1,201$ discrete integer seconds:
-- Fast: $600	ext{ s} 	imes rac{50}{3} = 10,000$ Wh.
-- Slow: $\lfloor 601	ext{ s} 	imes rac{25}{3} floor = \lfloor rac{15,025}{3} floor = \lfloor 5,008.33\dots floor = 5,008$ Wh.
+- Fast: $600\text{ s} \times \frac{50}{3} = 10,000$ Wh.
+- Slow: $\lfloor 601\text{ s} \times \frac{25}{3} \rfloor = \lfloor \frac{15,025}{3} \rfloor = \lfloor 5,008.33\dots \rfloor = 5,008$ Wh.
 - Total delivered $= 10,000 + 5,008 = 15,008$ Wh.
-- Ending SoC $= 50,000 + 15,008 = \mathbf{65,008	ext{ Wh}}$.
+- Ending SoC $= 50,000 + 15,008 = \mathbf{65,008\text{ Wh}}$.
 
 **Why 65,001 Wh was physically impossible:**  
 In discrete whole seconds at 30 kW:
-- $600$ seconds slow delivers $5,000$ Wh $	o$ SoC $= 65,000$ Wh.
-- $601$ seconds slow delivers $5,008$ Wh $	o$ SoC $= 65,008$ Wh.
+- $600$ seconds slow delivers $5,000$ Wh $\to$ SoC $= 65,000$ Wh.
+- $601$ seconds slow delivers $5,008$ Wh $\to$ SoC $= 65,008$ Wh.
 There is **no discrete whole-second duration** that can produce an ending SoC of 65,001 Wh. Claiming 65,001 Wh assumed fractional continuous seconds (600.12s), which violates the discrete second requirement. 65,008 Wh is the exact physical reality.
 
 ---
 
 ## 3. PIT Mutation Testing Results
 
-PIT was executed with the `STRONGER` mutator group and `pitest-junit5-plugin`:
-- **`ev-validator` Score:** **77% overall mutation score**, **78% test strength** (399 killed, 120 survived across 519 mutations).
-  - Increments: 100% killed (3 / 3)
-  - Null Returns: 91% killed (48 / 53)
-  - Remove Conditional ORDER_IF: 90% killed (37 / 41)
-  - Math Mutator: 89% killed (16 / 18)
-  - Boolean True Returns: 80% killed (4 / 5)
-  - Remove Conditional EQUAL_ELSE: 74% killed (78 / 105)
-- **Core 7 Validators Survivor Analysis:**
-  - `TripTimingValidator`: **100% killed (0 survivors)**.
-  - `BatteryFloorValidator`: 2 survivors on `instanceof` check branch elimination (equivalent mutants in two-branch activity hierarchy).
-  - `ReserveToHubValidator`: 3 survivors (boundary checks and null handling).
-  - `ChargerCapacityValidator`: 7 survivors (deduplicating identical timestamps, sort comparators).
-  - `ChargingCurveValidator`: 9 survivors (boundary ranges caught redundantly by bounds validator).
-  - `TariffCostValidator`: 10 survivors (sub-second window overlap boundaries).
-  - `AssignmentValidator`: 16 survivors (internal location resolution null handling).
-- **`ev-domain` Score:** **81.1% mutation score** (198 killed, 46 survived across 244 mutations):
+PIT was re-run on 2026-10-30T19:21:37+05:30 with the `STRONGER` mutator group and `pitest-junit5-plugin`. The line-by-line survivor list is in `docs/audits/PHASE2_CLOSURE.md`.
+- **`ev-validator` Score:** **80% mutation score**, **80% test strength** (420 killed, 105 survived, 3 with no coverage, 528 mutations). An earlier run on the same day, before the tenant-boundary assertions, was 77% (406 killed of 526).
+  - Increments: 100% killed (2 / 2)
+  - Boolean false returns: 100% killed (4 / 4)
+  - Null returns: 97% killed (56 / 58)
+  - Remove conditional ORDER_IF: 90% killed (37 / 41)
+  - Math: 89% killed (16 / 18)
+  - Void method calls: 87% killed (39 / 45)
+  - Boolean true returns: 80% killed (4 / 5)
+  - Remove conditional EQUAL_IF: 79% killed (84 / 107, plus 1 with no coverage)
+  - Remove conditional ORDER_ELSE: 78% killed (32 / 41)
+  - Remove conditional EQUAL_ELSE: 76% killed (81 / 107, plus 1 with no coverage)
+  - Empty object returns: 76% killed (34 / 45, plus 1 with no coverage)
+  - Conditionals boundary: 51% killed (21 / 41)
+  - Primitive returns: 71% killed (10 / 14)
+- **Classes with survivors or no coverage** (counts are in `docs/audits/PHASE2_CLOSURE.md`): `TripTimingValidator` has none. The largest remaining sets are `ChargingActivityEnergyValidator` (22), `AssignmentValidator` (15), `PlanValidator` (11), `TariffCostValidator` (10), and `ChargingCurveValidator` (9).
+- **`ev-domain` Score:** **81.1% mutation score** (198 killed, 46 survived across 244 mutations). This domain run was not repeated in the closure session:
   - `Charger`: 100% (15 / 15)
   - `ChargerStatus`: 100% (6 / 6)
   - `Hub`: 100% (2 / 2)
@@ -779,7 +777,7 @@ PIT was executed with the `STRONGER` mutator group and `pitest-junit5-plugin`:
 
 ## 4. Check-Deletion Probe Results
 
-Every core validator check was systematically commented out with `if (false && ...)` on a throwaway branch. All 14 checks were detected and caught by the test suite:
+Re-executed on 2026-10-30 against this working tree: each condition was disabled with `if (false && …)`, the named test was run, and the file was restored before the next probe. All 14 tests failed. Details are in `docs/audits/PHASE2_CLOSURE.md`.
 
 | # | Check Label | Validator File | First Failing Test Method | Status |
 |---|---|---|---|---|
@@ -804,12 +802,14 @@ Every core validator check was systematically commented out with `if (false && .
 
 ## 5. Fuzz and Claims Verification
 
-Implemented in [`PlanValidatorMutationFuzzTest.java`](file://ev-validator/src/test/java/com/moveinsync/ev/validator/PlanValidatorMutationFuzzTest.java):
+`PlanValidatorRuleCatalogFuzzTest` adds 8 seeded trials that require every `RuleId` to be reported by its own corruption. The earlier fuzz below covers a subset of rules at higher volume.
+
+Implemented in [PlanValidatorMutationFuzzTest.java](../../ev-validator/src/test/java/com/moveinsync/ev/validator/PlanValidatorMutationFuzzTest.java):
 1. **Known-Valid Plans Invariance:** $2,000$ randomized valid fleet plans generated across various fleet sizes (1 to 10 vehicles) and trip counts; $100\%$ validated as clean (`report.isValid() == true`, 0 violations).
 2. **Single-Field Corruption Fuzzing:** $3,000$ randomized single-field corruptions (shaving 1 Wh, shifting 1 s, under-duration charging, double assignment, departure SoC mismatch); $100\%$ detected as invalid with the exact matching `RuleId`.
 3. **Session Cost Boundary Rejection:** Added named tests in `PlanValidatorTimingAndCapacityTest.java`:
-   - `sessionCostPlusOneMicroUnitRejected`: exact tariff cost $+ 1$ micro-unit $	o$ rejected with `RuleId.COST_MISMATCH`.
-   - `sessionCostMinusOneMicroUnitRejected`: exact tariff cost $- 1$ micro-unit $	o$ rejected with `RuleId.COST_MISMATCH`.
+   - `sessionCostPlusOneMicroUnitRejected`: exact tariff cost $+ 1$ micro-unit $\to$ rejected with `RuleId.COST_MISMATCH`.
+   - `sessionCostMinusOneMicroUnitRejected`: exact tariff cost $- 1$ micro-unit $\to$ rejected with `RuleId.COST_MISMATCH`.
 
 ---
 
@@ -826,7 +826,7 @@ Implemented in [`PlanValidatorMutationFuzzTest.java`](file://ev-validator/src/te
 
 ## 7. Per-Commit Health and History Invariance
 
-1. **Per-Commit Verification:** Every commit on `fix/phase2-remediation` was verified by the pre-commit hook which executes `./scripts/verify.sh`. All 12 commits passed with zero warnings, zero lint errors, and 100% green tests.
+1. **Per-Commit Verification:** This claim is withdrawn. `git rebase -x scripts/verify.sh d6a23c9` on throwaway branch `tmp-rebase-check` stopped on `a1c9be4` (`testCompile` failure). Later commits were not replayed. See [HISTORY_OPTIONS.md](HISTORY_OPTIONS.md). History was not rewritten.
 2. **Strict History Linearity:** `git merge-base --is-ancestor <hash> HEAD` was verified for all commit hashes from `FINDING_MAP.md` (including `d6a23c9`, `56bf883`, `c1e321e`, and `e27f343`). Output: `All hashes are strict ancestors of HEAD: True`. History was never squashed or rewritten.
 3. **Clean Tree Status:** Benchmark tests write execution reports to `target/reports/` by default, keeping `git status` completely clean after benchmark runs.
 

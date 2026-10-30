@@ -81,11 +81,12 @@ class ValidatorCoverageTest {
   @DisplayName("ValidationContext and ValidationInput boundary validations and getters")
   void validationInputAndContextBoundaries() {
     Location loc = Location.of("L1", "Loc 1");
-    Hub hub = Hub.of("H1", "Hub 1", loc, ZoneId.of("Asia/Kolkata"), 1);
-    Charger chg = Charger.of("C1", "H1", 50);
-    Vehicle cab = new Vehicle(VehicleId.of("CAB-01"), 60_000L, 150L, 50);
+    Hub hub = Hub.of("t1", "H1", "Hub 1", loc, ZoneId.of("Asia/Kolkata"), 1);
+    Charger chg = Charger.of("t1", "C1", "H1", 50);
+    Vehicle cab = new Vehicle(TenantId.of("t1"), VehicleId.of("CAB-01"), 60_000L, 150L, 50);
     Trip trip =
         new Trip(
+            TenantId.of("t1"),
             TripId.of("T1"),
             Instant.EPOCH.plusSeconds(100),
             loc,

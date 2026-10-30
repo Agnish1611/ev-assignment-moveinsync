@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.moveinsync.ev.domain.location.Location;
+import com.moveinsync.ev.domain.tenant.TenantId;
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ class TripTest {
 
     Trip trip =
         new Trip(
+            TenantId.of("tenant-fixture"),
             TripId.of("TRIP-001"),
             start,
             pickupLoc,
@@ -46,6 +48,7 @@ class TripTest {
     assertThatThrownBy(
             () ->
                 new Trip(
+                    TenantId.of("tenant-fixture"),
                     TripId.of("TRIP-002"),
                     start,
                     pickupLoc,
@@ -68,6 +71,7 @@ class TripTest {
     assertThatThrownBy(
             () ->
                 new Trip(
+                    TenantId.of("tenant-fixture"),
                     TripId.of("TRIP-PII-1"),
                     start,
                     pickupLoc,
@@ -82,6 +86,7 @@ class TripTest {
     assertThatThrownBy(
             () ->
                 new Trip(
+                    TenantId.of("tenant-fixture"),
                     TripId.of("TRIP-PII-2"),
                     start,
                     pickupLoc,
@@ -96,6 +101,7 @@ class TripTest {
     assertThatThrownBy(
             () ->
                 new Trip(
+                    TenantId.of("tenant-fixture"),
                     TripId.of("TRIP-PII-3"),
                     start,
                     pickupLoc,

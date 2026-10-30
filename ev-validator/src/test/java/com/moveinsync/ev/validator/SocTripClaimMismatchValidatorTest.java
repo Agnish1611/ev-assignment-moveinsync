@@ -34,11 +34,13 @@ class SocTripClaimMismatchValidatorTest {
   private final Location pickLoc = Location.of("LOC-PICK", "Pick Loc");
   private final Location dropLoc = Location.of("LOC-DROP", "Drop Loc");
 
-  private final Hub hub = Hub.of("HUB-1", "Main Hub", hubLoc, ZoneId.of("UTC"), 1);
-  private final Charger charger = Charger.of("CHG-1", "HUB-1", 50);
-  private final Vehicle cab = new Vehicle(VehicleId.of("CAB-01"), 60_000L, 150L, 50);
+  private final Hub hub = Hub.of("tenant-1", "HUB-1", "Main Hub", hubLoc, ZoneId.of("UTC"), 1);
+  private final Charger charger = Charger.of("tenant-1", "CHG-1", "HUB-1", 50);
+  private final Vehicle cab =
+      new Vehicle(TenantId.of("tenant-1"), VehicleId.of("CAB-01"), 60_000L, 150L, 50);
   private final Trip trip =
       new Trip(
+          TenantId.of("tenant-1"),
           TripId.of("TRIP-01"),
           t0.plusSeconds(1800),
           pickLoc,
