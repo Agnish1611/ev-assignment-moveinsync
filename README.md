@@ -31,6 +31,29 @@ All plans must satisfy invariants H1–H6 prior to publication or persistence:
 - Floating-point arithmetic (`float`, `double`) is strictly forbidden across `ev-domain`, `ev-planner-core` feasibility checks, and `ev-validator`.
 - Conservative rounding: Energy rounds UP, time rounds UP, capacity rounds DOWN.
 
+### Deterministic Charging Curve Model (H6 & Decision D15)
+
+The physical charging profile is governed by a deterministic two-segment piecewise-linear model configured via typed `ChargingCurveConfig(fastThresholdPercent, slowRatePercent)` (defaults: 80% threshold, 50% power ratio):
+
+1. **Fast Segment ($0\% \to 80\%$ SoC):**
+   - Operates at 100% of effective plug power: $P_{\text{fast}} = \min(P_{\text{charger}}, P_{\text{vehicle}}) \times 1000\text{ W}$.
+   - Duration required to charge $E_{\text{fast}}$ Wh:
+     $$\Delta t_{\text{fast}} = \left\lceil \frac{E_{\text{fast}} \times 3600}{P_{\text{fast}}} \right\rceil\text{ seconds}$$
+   - Energy delivered in duration $t \le \Delta t_{\text{thresh}}$:
+     $$\Delta E_{\text{delivered}} = \left\lfloor \frac{t \times P_{\text{fast}}}{3600} \right\rfloor\text{ Wh}$$
+
+2. **Slow Segment ($80\% \to 100\%$ SoC):**
+   - Tapered charging rate at 50% effective plug power: $P_{\text{slow}} = \lfloor P_{\text{fast}} \times 50 / 100 \rfloor\text{ W}$.
+   - Duration required to charge $E_{\text{slow}}$ Wh:
+     $$\Delta t_{\text{slow}} = \left\lceil \frac{E_{\text{slow}} \times 3600}{P_{\text{slow}}} \right\rceil\text{ seconds}$$
+   - Energy delivered in remaining duration $t_{\text{rem}} = t - \Delta t_{\text{thresh}}$:
+     $$\Delta E_{\text{delivered}} = \left\lfloor \frac{t_{\text{rem}} \times P_{\text{slow}}}{3600} \right\rfloor\text{ Wh}$$
+
+3. **Conservative Rounding Invariant:**
+   - Charging session durations round **UP** to avoid underestimating charger plug occupancy.
+   - Energy delivery rounds **DOWN** to avoid overestimating vehicle battery SoC.
+   - Energy conservation strictly verified: claimed session target SoC must match curve delivery for the elapsed duration (`RuleId.CLAIMED_SOC_MISMATCH`).
+
 ## Verification Gate
 
 The repository enforces a zero-tolerance verification gate via `scripts/verify.sh`:
