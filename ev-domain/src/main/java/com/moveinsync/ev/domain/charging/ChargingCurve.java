@@ -41,6 +41,12 @@ public final class ChargingCurve {
     this(DEFAULT_FAST_THRESHOLD_PERCENT, DEFAULT_SLOW_RATE_PERCENT);
   }
 
+  public ChargingCurve(ChargingCurveConfig config) {
+    this(
+        java.util.Objects.requireNonNull(config, "config must not be null").fastThresholdPercent(),
+        config.slowRatePercent());
+  }
+
   public ChargingCurve(int fastThresholdPercent, int slowRatePercent) {
     if (fastThresholdPercent <= 0 || fastThresholdPercent >= 100) {
       throw new IllegalArgumentException(
