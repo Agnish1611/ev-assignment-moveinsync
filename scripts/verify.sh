@@ -95,16 +95,30 @@ if grep -rn --include="*.java" --exclude-dir="target" -iE '(password|secret|apik
     exit 1
 fi
 
+# 3k. Class length gate: max 300 lines for any Java file (production and test)
+OVERSIZED_FILES=$(find . -name "*.java" -not -path "*/target/*" -exec wc -l {} + | awk '$1 > 300 && $2 != "total" {print $2 " (" $1 " lines)"}')
+if [[ -n "$OVERSIZED_FILES" ]]; then
+    echo "ERROR: Found Java files exceeding the 300-line OOP class length gate:"
+    echo "$OVERSIZED_FILES"
+    exit 1
+fi
+
 echo "✓ Forbidden constructs check passed."
 
-# 4. Log and PII hygiene check
-echo "[Step 4/6] Running Log and PII hygiene checks..."
+# 4. Log, PII and Secret scanner hygiene check
+echo "[Step 4/6] Running Log, PII and Secret hygiene checks..."
 # Check for obvious PII field logging or email/phone patterns in codebase
 if grep -rn --include="*.java" --exclude-dir="target" -E "log\.(info|debug|warn|error).*([pP]hone|[eE]mail|[cC]oordinates)" ev-domain ev-planner-core ev-validator ev-service ev-sim; then
     echo "ERROR: Potential PII logging detected!"
     exit 1
 fi
-echo "✓ Log and PII hygiene check passed."
+
+# Secret scanner checks
+if grep -rn --include="*.java" --include="*.yml" --include="*.yaml" --include="*.properties" --include="*.xml" --exclude-dir="target" --exclude-dir=".git" -E "BEGIN (RSA|EC|DSA|OPENSSH)? ?PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[0-9a-zA-Z]{36}" .; then
+    echo "ERROR: Cryptographic private key or hard-coded service token detected!"
+    exit 1
+fi
+echo "✓ Log, PII and Secret scanner check passed."
 
 # 5. Integration tests (if docker/testcontainers available)
 echo "[Step 5/6] Checking integration test environment..."
