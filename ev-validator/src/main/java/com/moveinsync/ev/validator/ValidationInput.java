@@ -51,7 +51,7 @@ public final class ValidationInput {
   private final int idlePowerW;
   private final int maxViolationsReportCap;
 
-  public ValidationInput(
+  ValidationInput(
       TenantId tenantId,
       Instant horizonStart,
       Instant horizonEnd,
@@ -108,7 +108,7 @@ public final class ValidationInput {
     this.maxViolationsReportCap = maxViolationsReportCap;
   }
 
-  public ValidationInput(
+  ValidationInput(
       TenantId tenantId,
       Instant horizonStart,
       Instant horizonEnd,
