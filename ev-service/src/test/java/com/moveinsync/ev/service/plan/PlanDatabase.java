@@ -15,6 +15,9 @@ final class PlanDatabase {
 
   private static PostgreSQLContainer postgres;
   private static PGSimpleDataSource dataSource;
+  private static String jdbcUrl;
+  private static String databaseUser;
+  private static String databasePassword;
 
   private PlanDatabase() {
     throw new IllegalStateException("utility");
@@ -34,7 +37,25 @@ final class PlanDatabase {
     grant(source);
     postgres = container;
     dataSource = source;
+    jdbcUrl = container.getJdbcUrl();
+    databaseUser = container.getUsername();
+    databasePassword = container.getPassword();
     return source;
+  }
+
+  static String jdbcUrl() {
+    open();
+    return jdbcUrl;
+  }
+
+  static String databaseUser() {
+    open();
+    return databaseUser;
+  }
+
+  static String databasePassword() {
+    open();
+    return databasePassword;
   }
 
   static long count(String sql, Object... args) {

@@ -7,13 +7,13 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 /** Puts the transaction on the non-owner role and sets the tenant for row-level security. */
-final class TenantSession {
+public final class TenantSession {
 
   private TenantSession() {
     throw new IllegalStateException("utility");
   }
 
-  static void apply(Connection connection, String tenantId) throws SQLException {
+  public static void apply(Connection connection, String tenantId) throws SQLException {
     try (Statement statement = connection.createStatement()) {
       statement.execute("SET LOCAL ROLE ev_app");
     }
