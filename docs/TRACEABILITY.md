@@ -6,8 +6,8 @@ Traceability between case study requirements and verification evidence.
 |---|---|---|
 | Battery floor / charger capacity / trip timing | Validator + mutation tests + property tests | Phase 2 complete & verified: `PlanValidatorTest`, `PlanValidatorMutationTest` (24 mutations), `PlanValidatorPropertyTest` (1,000 jqwik trials), `PlanValidatorDeterminismTest` (200 permutations); jacoco line >= 90%, branch >= 80% |
 | Minimise backups, then cost, with explanation | Objective tuple docs + tests + README trade-off section | Phase 4, 5, 7 |
-| Re-plan within 2 s, minimal changes | Drift scenario test + latency metrics + replan_run table | Phase 8 |
-| Charger failure re-plan | Charger-failure test | Phase 8 |
+| Re-plan within 2 s, minimal changes | Drift scenario test + latency metrics + replan_run table | `LadderReplanTest` moves the 22 percent trip and at most two others inside a 2 second deadline (D22). `LadderTriggerTest` covers an added trip, a cancellation, cab removal, and a cab below the floor (D26). `replan_run` remains Phase 9. Latency metrics remain Phase 12 |
+| Charger failure re-plan | Charger-failure test | `ChargerTriggerTest` moves an active session off the failed plug. `TriggerReplanValidatorTest` checks that plan at 15 percent (D26) |
 | Why unassigned (reasons) | Counterfactual probe tests + reason-code docs | `AssignmentDiagnosis` and `AssignmentDiagnosisTest`. Evidence is watt-hours and a UTC plug window (D25) |
 | Per-cab timeline with SoC at each step | Timeline endpoint + tests | Generator: `CabTimeline` and `CabTimelineTest`. HTTP endpoint remains Phase 11 |
 | Heuristic + complexity + lower bound | Javadoc Big-O + lower-bound report in `docs/reports/` | Phase 5, 6, 7 |

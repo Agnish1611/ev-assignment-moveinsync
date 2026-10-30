@@ -7,7 +7,6 @@ import com.moveinsync.ev.domain.schedule.UnassignedReasonCode;
 import com.moveinsync.ev.domain.schedule.UnassignedTrip;
 import com.moveinsync.ev.domain.trip.Trip;
 import com.moveinsync.ev.planner.config.SolverConfig;
-import com.moveinsync.ev.planner.input.CabShift;
 import com.moveinsync.ev.planner.input.PlannerInput;
 import com.moveinsync.ev.planner.objective.ObjectiveScore;
 import com.moveinsync.ev.planner.solve.DriftEvent;
@@ -26,7 +25,7 @@ import java.util.Set;
  * pickup, otherwise moves it to the cab with the most energy left. Tier 1 and tier 2 lift the
  * nearest unfrozen trips and repair again. A missed deadline, or a repair that would change more
  * than {@link SolverConfig#DEFAULT_REPLAN_CHANGE_BUDGET} assignments, sends only the trips that
- * still do not fit to backup.
+ * still do not fit to backup. Charger, trip, and cab triggers are prepared before this climb.
  *
  * <p>Time O(T^2 · C · H · P) for T trips, C cabs, H hubs, and P plugs. Space O(T + C). The deadline
  * is polled before each tier. Tier 2 is kept only when it beats the incumbent and the plan id is
@@ -59,35 +58,37 @@ public final class LadderReplanSolver implements ReplanSolver {
       SolverConfig config,
       Clock clock,
       String version) {
+    ReplanTrigger trigger = ReplanTrigger.prepare(input, current, event);
+    PlannerInput fleet = trigger.input();
     Instant now = clock.instant();
-    String emergency = emergencyCab(input, event);
-    Attempt safe = patch(input, current, config, emergency, now);
+    String emergency = trigger.emergencyCab();
+    Attempt safe = patch(fleet, current, config, trigger, now);
     if (!now.isBefore(config.deadline())) {
-      return publish(input, config, clock, current, safe, true);
+      return publish(fleet, config, clock, current, safe, true);
     }
-    List<Trip> opened = preview(input, current, config, emergency, now);
+    List<Trip> opened = preview(fleet, current, config, trigger, now);
     Attempt best =
-        keep(null, repair(input, current, config, emergency, now, Set.of()), current, config);
+        keep(null, repair(fleet, current, config, trigger, now, Set.of()), current, config);
     if (!clock.instant().isBefore(config.deadline())) {
-      return stop(input, config, clock, current, best, safe);
+      return stop(fleet, config, clock, current, best, safe);
     }
     Set<String> first =
         NeighbourRing.closest(
-            input, current, opened, now, config.lockWindowSeconds(), emergency, 1);
-    best = keep(best, repair(input, current, config, emergency, now, first), current, config);
+            fleet, current, opened, now, config.lockWindowSeconds(), emergency, 1);
+    best = keep(best, repair(fleet, current, config, trigger, now, first), current, config);
     if (!clock.instant().isBefore(config.deadline())) {
-      return stop(input, config, clock, current, best, safe);
+      return stop(fleet, config, clock, current, best, safe);
     }
     Set<String> second =
         NeighbourRing.closest(
-            input, current, opened, now, config.lockWindowSeconds(), emergency, 2);
+            fleet, current, opened, now, config.lockWindowSeconds(), emergency, 2);
     best =
         polish(
-            best, repair(input, current, config, emergency, now, second), version, current, config);
+            best, repair(fleet, current, config, trigger, now, second), version, current, config);
     if (best != null) {
-      return publish(input, config, clock, current, best, false);
+      return publish(fleet, config, clock, current, best, false);
     }
-    return publish(input, config, clock, current, safe, false);
+    return publish(fleet, config, clock, current, safe, false);
   }
 
   private static SolveResult stop(
@@ -149,34 +150,22 @@ public final class LadderReplanSolver implements ReplanSolver {
   }
 
   private static List<Trip> preview(
-      PlannerInput input, FleetPlan current, SolverConfig config, String emergency, Instant now) {
-    return ShiftReplay.replay(
-            input,
-            current,
-            config.planningFloorPercent(),
-            emergency,
-            now,
-            config.lockWindowSeconds(),
-            Set.of())
-        .open();
+      PlannerInput input,
+      FleetPlan current,
+      SolverConfig config,
+      ReplanTrigger trigger,
+      Instant now) {
+    return replay(input, current, config, trigger, now, Set.of()).open();
   }
 
   private static Attempt repair(
       PlannerInput input,
       FleetPlan current,
       SolverConfig config,
-      String emergency,
+      ReplanTrigger trigger,
       Instant now,
       Set<String> drop) {
-    ShiftReplay.State state =
-        ShiftReplay.replay(
-            input,
-            current,
-            config.planningFloorPercent(),
-            emergency,
-            now,
-            config.lockWindowSeconds(),
-            drop);
+    ShiftReplay.State state = replay(input, current, config, trigger, now, drop);
     List<Trip> open = new ArrayList<>(state.open());
     boolean placed = SlackPlacer.place(state.cursors(), open, input, config.planningFloorPercent());
     if (!placed || !state.backed().isEmpty()) {
@@ -186,53 +175,58 @@ public final class LadderReplanSolver implements ReplanSolver {
         > SolverConfig.DEFAULT_REPLAN_CHANGE_BUDGET) {
       return skip();
     }
-    return new Attempt(state.cursors(), parked(input, current), true);
+    return new Attempt(state.cursors(), parked(input, current, trigger), true);
   }
 
   private static Attempt patch(
-      PlannerInput input, FleetPlan current, SolverConfig config, String emergency, Instant now) {
-    ShiftReplay.State state =
-        ShiftReplay.replay(
-            input,
-            current,
-            config.planningFloorPercent(),
-            emergency,
-            now,
-            config.lockWindowSeconds(),
-            Set.of());
+      PlannerInput input,
+      FleetPlan current,
+      SolverConfig config,
+      ReplanTrigger trigger,
+      Instant now) {
+    ShiftReplay.State state = replay(input, current, config, trigger, now, Set.of());
     List<Trip> failed = new ArrayList<>(state.open());
     failed.addAll(state.backed());
-    return new Attempt(state.cursors(), backedUp(input, current, failed), false);
+    return new Attempt(state.cursors(), backedUp(input, current, failed, trigger), false);
+  }
+
+  private static ShiftReplay.State replay(
+      PlannerInput input,
+      FleetPlan current,
+      SolverConfig config,
+      ReplanTrigger trigger,
+      Instant now,
+      Set<String> drop) {
+    return ShiftReplay.replay(
+        input,
+        current,
+        config.planningFloorPercent(),
+        now,
+        config.lockWindowSeconds(),
+        new ShiftReplay.Scope(trigger.emergencyCab(), drop, trigger.cancelled(), trigger.reopen()));
   }
 
   private static Attempt skip() {
     return new Attempt(List.of(), List.of(), false);
   }
 
-  private static String emergencyCab(PlannerInput input, DriftEvent event) {
-    if (event.kind() != DriftEvent.Kind.BATTERY && event.kind() != DriftEvent.Kind.LATE_CAB) {
-      return "";
-    }
-    for (CabShift cab : input.cabs()) {
-      if (cab.vehicle().id().value().equals(event.subjectId())) {
-        return event.subjectId();
-      }
-    }
-    throw new IllegalArgumentException("drift subject is not a cab: " + event.subjectId());
-  }
-
-  private static List<UnassignedTrip> parked(PlannerInput input, FleetPlan current) {
-    return backedUp(input, current, List.of());
+  private static List<UnassignedTrip> parked(
+      PlannerInput input, FleetPlan current, ReplanTrigger trigger) {
+    return backedUp(input, current, List.of(), trigger);
   }
 
   private static List<UnassignedTrip> backedUp(
-      PlannerInput input, FleetPlan current, List<Trip> failed) {
+      PlannerInput input, FleetPlan current, List<Trip> failed, ReplanTrigger trigger) {
     List<UnassignedTrip> rows = new ArrayList<>();
     for (Trip trip : failed) {
       rows.add(UnassignedTrip.of(trip, UnassignedReasonCode.SAFE_PATCH_FALLBACK, SAFE_EXPLANATION));
     }
     for (UnassignedTrip prior : current.unassignedTrips()) {
-      Optional<Trip> live = live(input, prior.trip().id().value());
+      String id = prior.trip().id().value();
+      if (trigger.reopen().contains(id) || trigger.cancelled().contains(id)) {
+        continue;
+      }
+      Optional<Trip> live = live(input, id);
       if (live.isPresent() && !contains(failed, live.orElseThrow())) {
         rows.add(UnassignedTrip.of(live.orElseThrow(), prior.reasonCode(), prior.explanation()));
       }
