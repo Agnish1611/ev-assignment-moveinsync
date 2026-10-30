@@ -19,6 +19,7 @@ import com.moveinsync.ev.domain.schedule.TripAssignment;
 import com.moveinsync.ev.domain.schedule.UnassignedReasonCode;
 import com.moveinsync.ev.domain.schedule.UnassignedTrip;
 import com.moveinsync.ev.domain.schedule.VehicleSchedule;
+import com.moveinsync.ev.domain.tariff.UtcTariffWindow;
 import com.moveinsync.ev.domain.tenant.TenantId;
 import com.moveinsync.ev.domain.trip.Trip;
 import com.moveinsync.ev.domain.trip.TripId;
@@ -1122,5 +1123,76 @@ class PlanValidatorMutationTest {
     ValidationReport report = validator.validate(input, planWithDuplicate);
     assertThat(report.isValid()).isFalse();
     assertThat(report.violationsFor(RuleId.TRIP_ASSIGNED_AND_UNASSIGNED)).isNotEmpty();
+  }
+
+  @Test
+  @DisplayName(
+      "Mutation 24: Charging session cost altered by 1 micro-unit produces COST_MISMATCH (F-09)")
+  void mutationSessionCostAlteredByOneMicroUnit() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Instant tStart = t0.plusSeconds(2400); // 08:40:00Z
+    Instant tEnd = tStart.plusSeconds(1080); // 08:58:00Z
+
+    // 8,000 Wh delivered (47,000 Wh -> 55,000 Wh)
+    // Tariff: 100,000 micros/kWh = 0.1 / kWh -> 8,000 Wh = 800,000 micros
+    UtcTariffWindow tariffWindow =
+        new UtcTariffWindow(hub1.id(), t0, t0.plusSeconds(7200), 100_000L);
+
+    ValidationInput input =
+        ValidationInput.builder()
+            .tenantId(TenantId.of("tenant-1"))
+            .horizon(baselineValidPlan.horizonStart(), baselineValidPlan.horizonEnd())
+            .consumptionModel(context.consumptionModel())
+            .distanceProvider(context.distanceProvider())
+            .chargingCurve(context.chargingCurve())
+            .batteryFloorPercentage(context.batteryFloorPercentage())
+            .enforceReserveToHub(context.enforceReserveToHub())
+            .addHub(hub1)
+            .addCharger(charger1)
+            .addUtcTariff(tariffWindow)
+            .addVehicle(cab1, hub1Loc, 50_000L)
+            .addTrip(baselineTrip)
+            .build();
+
+    // Mutate session cost: expected 800,000 micros, altered by +1 micro-unit -> 800,001 micros
+    ChargingSession mutatedSession =
+        new ChargingSession(
+            "SESS-BASE",
+            cab1.id(),
+            hub1.id(),
+            charger1.id(),
+            tStart,
+            tEnd,
+            47_000L,
+            55_000L,
+            800_001L);
+
+    TripAssignment assign =
+        new TripAssignment(
+            baselineTrip,
+            cab1.id(),
+            baselineTrip.startTs(),
+            baselineTrip.startTs().plusSeconds(1200),
+            5_000,
+            600,
+            750L,
+            49_250L,
+            47_750L);
+    VehicleSchedule sched =
+        new VehicleSchedule(cab1, hub1Loc, 50_000L, t0, List.of(assign, mutatedSession));
+    FleetPlan mutatedPlan =
+        new FleetPlan(
+            "P-COST-MUT",
+            "tenant-1",
+            baselineValidPlan.horizonStart(),
+            baselineValidPlan.horizonEnd(),
+            List.of(sched),
+            List.of(),
+            999L,
+            "hash");
+
+    ValidationReport report = validator.validate(input, mutatedPlan);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.COST_MISMATCH)).isNotEmpty();
   }
 }

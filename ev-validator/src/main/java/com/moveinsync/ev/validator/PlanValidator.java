@@ -86,6 +86,9 @@ public final class PlanValidator {
       ValidationContext valCtx = input.toValidationContext();
       runInvariants(valCtx, candidate, violations);
 
+      TariffCostValidator tariffVal = new TariffCostValidator(input);
+      violations.addAll(tariffVal.validate(candidate));
+
       List<PlanViolation> sortedViolations =
           violations.stream().distinct().sorted(VIOLATION_ORDER).toList();
 

@@ -9,6 +9,7 @@ import com.moveinsync.ev.domain.hub.Hub;
 import com.moveinsync.ev.domain.hub.HubId;
 import com.moveinsync.ev.domain.location.Location;
 import com.moveinsync.ev.domain.tariff.TariffWindow;
+import com.moveinsync.ev.domain.tariff.UtcTariffWindow;
 import com.moveinsync.ev.domain.tenant.TenantId;
 import com.moveinsync.ev.domain.trip.Trip;
 import com.moveinsync.ev.domain.trip.TripId;
@@ -43,6 +44,7 @@ public final class ValidationInput {
   private final Map<HubId, Hub> hubs;
   private final Map<ChargerId, Charger> chargers;
   private final List<TariffWindow> tariffs;
+  private final List<UtcTariffWindow> utcTariffs;
   private final DistanceProvider distanceProvider;
   private final ConsumptionModel consumptionModel;
   private final ChargingCurve chargingCurve;
@@ -61,6 +63,7 @@ public final class ValidationInput {
       Map<HubId, Hub> hubs,
       Map<ChargerId, Charger> chargers,
       List<TariffWindow> tariffs,
+      List<UtcTariffWindow> utcTariffs,
       DistanceProvider distanceProvider,
       ConsumptionModel consumptionModel,
       ChargingCurve chargingCurve,
@@ -82,6 +85,8 @@ public final class ValidationInput {
     this.hubs = Collections.unmodifiableMap(new HashMap<>(hubs));
     this.chargers = Collections.unmodifiableMap(new HashMap<>(chargers));
     this.tariffs = Collections.unmodifiableList(new ArrayList<>(tariffs));
+    this.utcTariffs =
+        utcTariffs != null ? Collections.unmodifiableList(new ArrayList<>(utcTariffs)) : List.of();
     this.distanceProvider =
         Objects.requireNonNull(distanceProvider, "distanceProvider must not be null");
     this.consumptionModel =
@@ -95,6 +100,43 @@ public final class ValidationInput {
     this.batteryFloorPercentage = batteryFloorPercentage;
     this.enforceReserveToHub = enforceReserveToHub;
     this.idlePowerW = idlePowerW;
+  }
+
+  public ValidationInput(
+      TenantId tenantId,
+      Instant horizonStart,
+      Instant horizonEnd,
+      Map<VehicleId, Vehicle> vehicles,
+      Map<VehicleId, Long> initialSocsWh,
+      Map<VehicleId, Location> initialLocations,
+      Map<TripId, Trip> trips,
+      Map<HubId, Hub> hubs,
+      Map<ChargerId, Charger> chargers,
+      List<TariffWindow> tariffs,
+      DistanceProvider distanceProvider,
+      ConsumptionModel consumptionModel,
+      ChargingCurve chargingCurve,
+      int batteryFloorPercentage,
+      boolean enforceReserveToHub,
+      int idlePowerW) {
+    this(
+        tenantId,
+        horizonStart,
+        horizonEnd,
+        vehicles,
+        initialSocsWh,
+        initialLocations,
+        trips,
+        hubs,
+        chargers,
+        tariffs,
+        List.of(),
+        distanceProvider,
+        consumptionModel,
+        chargingCurve,
+        batteryFloorPercentage,
+        enforceReserveToHub,
+        idlePowerW);
   }
 
   public static Builder builder() {
@@ -157,6 +199,10 @@ public final class ValidationInput {
     return tariffs;
   }
 
+  public List<UtcTariffWindow> utcTariffs() {
+    return utcTariffs;
+  }
+
   public DistanceProvider distanceProvider() {
     return distanceProvider;
   }
@@ -209,6 +255,7 @@ public final class ValidationInput {
     private final Map<HubId, Hub> hubs = new HashMap<>();
     private final Map<ChargerId, Charger> chargers = new HashMap<>();
     private final List<TariffWindow> tariffs = new ArrayList<>();
+    private final List<UtcTariffWindow> utcTariffs = new ArrayList<>();
     private DistanceProvider distanceProvider;
     private ConsumptionModel consumptionModel;
     private ChargingCurve chargingCurve = ChargingCurve.defaultCurve();
@@ -256,6 +303,12 @@ public final class ValidationInput {
     public Builder addTariff(TariffWindow tariff) {
       Objects.requireNonNull(tariff, "tariff must not be null");
       this.tariffs.add(tariff);
+      return this;
+    }
+
+    public Builder addUtcTariff(UtcTariffWindow utcTariff) {
+      Objects.requireNonNull(utcTariff, "utcTariff must not be null");
+      this.utcTariffs.add(utcTariff);
       return this;
     }
 
@@ -307,6 +360,7 @@ public final class ValidationInput {
           hubs,
           chargers,
           tariffs,
+          utcTariffs,
           distanceProvider,
           consumptionModel,
           chargingCurve,
