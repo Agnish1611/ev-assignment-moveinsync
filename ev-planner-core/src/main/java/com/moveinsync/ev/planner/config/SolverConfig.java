@@ -41,6 +41,12 @@ public record SolverConfig(
   /** Plug-calendar jumps tried from one seed before the next seed. */
   public static final int FLOW_RETRY_ATTEMPTS = 6;
 
+  /**
+   * Hard cap on assignments a replan may change. The drifted trip counts, and at most two other
+   * assignments may change with it.
+   */
+  public static final int DEFAULT_REPLAN_CHANGE_BUDGET = 3;
+
   public SolverConfig {
     Objects.requireNonNull(deadline, "deadline must not be null");
     if (planningFloorPercent < MIN_PLANNING_FLOOR_PERCENT
