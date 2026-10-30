@@ -678,3 +678,237 @@ The proposed design for Phase 3 (`ev-planner-core`) strictly adheres to architec
    - `ev-service` invokes `PlanValidator.validate(validationInput, candidatePlan)` prior to committing or publishing.
    - If invalid, candidate is rejected, metric `validator_rejections_total` is incremented, and `SafePatchOperator` keeps plan head intact with affected trips rerouted to backup.
 
+
+---
+
+# PART D: Final Closure and Verification Addendum (Branch `fix/phase2-remediation`)
+
+This section documents the final verification and evidence for all 12 checklist items required prior to merging `fix/phase2-remediation` and commencing Phase 3.
+
+---
+
+## 1. Test Suite Preservation and Reconciliation
+
+A dedicated comprehensive audit document has been committed to [`docs/audits/TEST_PRESERVATION.md`](file://docs/audits/TEST_PRESERVATION.md).
+
+### 1.1 Suite Count Reconciliation Across Milestones
+| Module | `main` (`e27f343`) | Post-Audit (`56bf883`) | `HEAD` (Current) | Surefire Executions (`HEAD`) |
+|---|---|---|---|---|
+| `ev-domain` | 44 | 55 | 61 | 61 |
+| `ev-planner-core` | 2 | 3 | 3 | 3 |
+| `ev-validator` | 22 | 96 | 140 | 140 |
+| `ev-service` | 1 | 2 | 2 | 2 |
+| `ev-sim` | 0 | 0 | 0 | 0 |
+| `ev-bench` | 0 | 0 | 1 | 1 |
+| **Total Tests** | **69** | **156** | **207** | **207** |
+
+### 1.2 Preservation and Restoration
+1. **Restored Tests:** Both `chargerCapacityViolation()` and `tripTimingStartViolation()` from `main` have been fully restored and strengthened with `ValidationInput` in `PlanValidatorTimingAndCapacityTest.java`.
+2. **Correction of Prior Claim:** The Phase 2 audit claim that *"only `ChargingCurveTest` was modified"* was false. `TariffWindowTest.java` was also modified; in both files, assertions were added/strengthened with zero assertion deletions or loosenings.
+3. **Equivalence Proof:** Every test from `main` exists at `HEAD` with equal or stronger assertions (see [`TEST_PRESERVATION.md`](file://docs/audits/TEST_PRESERVATION.md) for full method-by-method assertion diffs).
+
+---
+
+## 2. Production-Edit-Then-Test-Edit Audit
+
+### 2.1 Production Class Diff Audit
+Across the remediation branch, changes to production classes were audited:
+- `ChargingSession.java`: Candidate model constructor checks were relaxed to permit unvalidated candidate states (e.g., negative SoC or inverted timestamps) so the validator can evaluate them and report diagnostic `RuleId` violations rather than failing during deserialization (D16).
+- `ChargingActivityEnergyValidator.java`, `ChargingCurveValidator.java`, `BatteryFloorValidator.java`: Modularized from the monolith `PlanValidator.java` into dedicated rule classes under `com.moveinsync.ev.validator.rules` to enforce the 300 LOC limit (AGENTS.md 2.2). No business logic was relaxed.
+
+### 2.2 Physics Derivation: 65,001 Wh vs 65,008 Wh in `IndependentGoldenPhysicsTest`
+- **Battery Capacity:** $75,000$ Wh.
+- **Fast Threshold (80%):** $75,000 	imes 0.80 = 60,000$ Wh.
+- **Charger Power:** $60$ kW ($60,000$ W).
+- **Fast Segment Rate ($\le 80\%$):** $60	ext{ kW} / 3600	ext{ s} = rac{50}{3}	ext{ Wh/s}$.
+- **Slow Segment Rate ($> 80\%$):** $50\%$ of $60	ext{ kW} = 30	ext{ kW} / 3600	ext{ s} = rac{25}{3}	ext{ Wh/s}$.
+
+Starting at $50,000$ Wh to reach $60,000$ Wh:
+$$	ext{Fast Duration} = \lceil rac{10,000 	imes 3600}{60,000} ceil = 600	ext{ s}.$$
+Energy delivered in fast segment $= 600 	imes rac{50}{3} = 10,000$ Wh. Ending SoC $= 60,000$ Wh.
+
+To reach a target above $60,000$ Wh in the slow segment:
+If desired target is $65,001$ Wh:
+$$	ext{Slow Energy Needed} = 65,001 - 60,000 = 5,001	ext{ Wh}.$$
+$$	ext{Slow Duration} = \lceil rac{5,001 	imes 3600}{30,000} ceil = \lceil rac{5,001 	imes 36}{300} ceil = \lceil 600.12 ceil = 601	ext{ seconds}.$$
+$$	ext{Total Duration} = 600 + 601 = 1,201	ext{ seconds}.$$
+
+Now, computing energy actually delivered over $1,201$ discrete integer seconds:
+- Fast: $600	ext{ s} 	imes rac{50}{3} = 10,000$ Wh.
+- Slow: $\lfloor 601	ext{ s} 	imes rac{25}{3} floor = \lfloor rac{15,025}{3} floor = \lfloor 5,008.33\dots floor = 5,008$ Wh.
+- Total delivered $= 10,000 + 5,008 = 15,008$ Wh.
+- Ending SoC $= 50,000 + 15,008 = \mathbf{65,008	ext{ Wh}}$.
+
+**Why 65,001 Wh was physically impossible:**  
+In discrete whole seconds at 30 kW:
+- $600$ seconds slow delivers $5,000$ Wh $	o$ SoC $= 65,000$ Wh.
+- $601$ seconds slow delivers $5,008$ Wh $	o$ SoC $= 65,008$ Wh.
+There is **no discrete whole-second duration** that can produce an ending SoC of 65,001 Wh. Claiming 65,001 Wh assumed fractional continuous seconds (600.12s), which violates the discrete second requirement. 65,008 Wh is the exact physical reality.
+
+---
+
+## 3. PIT Mutation Testing Results
+
+PIT was executed with the `STRONGER` mutator group and `pitest-junit5-plugin`:
+- **`ev-validator` Score:** **77% overall mutation score**, **78% test strength** (399 killed, 120 survived across 519 mutations).
+  - Increments: 100% killed (3 / 3)
+  - Null Returns: 91% killed (48 / 53)
+  - Remove Conditional ORDER_IF: 90% killed (37 / 41)
+  - Math Mutator: 89% killed (16 / 18)
+  - Boolean True Returns: 80% killed (4 / 5)
+  - Remove Conditional EQUAL_ELSE: 74% killed (78 / 105)
+- **Core 7 Validators Survivor Analysis:**
+  - `TripTimingValidator`: **100% killed (0 survivors)**.
+  - `BatteryFloorValidator`: 2 survivors on `instanceof` check branch elimination (equivalent mutants in two-branch activity hierarchy).
+  - `ReserveToHubValidator`: 3 survivors (boundary checks and null handling).
+  - `ChargerCapacityValidator`: 7 survivors (deduplicating identical timestamps, sort comparators).
+  - `ChargingCurveValidator`: 9 survivors (boundary ranges caught redundantly by bounds validator).
+  - `TariffCostValidator`: 10 survivors (sub-second window overlap boundaries).
+  - `AssignmentValidator`: 16 survivors (internal location resolution null handling).
+- **`ev-domain` Score:** **81.1% mutation score** (198 killed, 46 survived across 244 mutations):
+  - `Charger`: 100% (15 / 15)
+  - `ChargerStatus`: 100% (6 / 6)
+  - `Hub`: 100% (2 / 2)
+  - `OutageWindow`: 100% (6 / 6)
+  - `TariffWindow`: 100% (12 / 12)
+  - `ConstantConsumptionModel`: 94.1% (16 / 17)
+  - `UtcTariffWindow`: 87.0% (20 / 23)
+  - `ChargingCurve`: 79.8% (75 / 94, with 100% of Math and Return mutators killed).
+
+---
+
+## 4. Check-Deletion Probe Results
+
+Every core validator check was systematically commented out with `if (false && ...)` on a throwaway branch. All 14 checks were detected and caught by the test suite:
+
+| # | Check Label | Validator File | First Failing Test Method | Status |
+|---|---|---|---|---|
+| 1 | `BatteryFloorValidator:initialSocFloor` | `BatteryFloorValidator.java` | `ValidatorSubEngineCoverageTest#initialSocBelowFloor` | **CAUGHT (PASS)** |
+| 2 | `BatteryFloorValidator:initialSocBounds` | `BatteryFloorValidator.java` | `SocScheduleBoundsValidatorTest#initialSocExceedingCapacityProducesSocOutOfRange` | **CAUGHT (PASS)** |
+| 3 | `TripActivityEnergyValidator:dropoffSocFloor` | `TripActivityEnergyValidator.java` | `PlanValidatorSmokeTest#batteryFloorViolationOnTrip` | **CAUGHT (PASS)** |
+| 4 | `TripActivityEnergyValidator:arrivalSocFloor` | `TripActivityEnergyValidator.java` | `CausalCascadeAndReportCapFixtureTest#singleDelayedTripCascadesIntoDownstreamViolationsTest` | **CAUGHT (PASS)** |
+| 5 | `TripActivityEnergyValidator:departureSocMismatch` | `TripActivityEnergyValidator.java` | `CausalCascadeAndReportCapFixtureTest#singleDelayedTripCascadesIntoDownstreamViolationsTest` | **CAUGHT (PASS)** |
+| 6 | `ChargingActivityEnergyValidator:startSocMismatch` | `ChargingActivityEnergyValidator.java` | `H1BatteryFloorMutationTest#mutationRaiseSessionStartSocAboveArrivalSocAtHub` | **CAUGHT (PASS)** |
+| 7 | `ChargingActivityEnergyValidator:targetSocMismatch` | `ChargingActivityEnergyValidator.java` | `H5ReserveAndH6CurveMutationTest#mutationInflateTargetSocBy1Wh` | **CAUGHT (PASS)** |
+| 8 | `ChargingActivityEnergyValidator:startSocFloor` | `ChargingActivityEnergyValidator.java` | `CheckDeletionProbeKillTest#sessionStartBelowBatteryFloorExplicitlyReported` | **CAUGHT (PASS)** |
+| 9 | `ChargingCurveValidator:durationShort` | `ChargingCurveValidator.java` | `H5ReserveAndH6CurveMutationTest#mutationShave1SecondFromChargingDuration` | **CAUGHT (PASS)** |
+| 10 | `ChargerCapacityValidator:hubCapacityBreach` | `ChargerCapacityValidator.java` | `PlanValidatorTimingAndCapacityTest#chargerCapacityViolation` | **CAUGHT (PASS)** |
+| 11 | `ChargerCapacityValidator:plugDoubleBooked` | `ChargerCapacityValidator.java` | `CheckDeletionProbeKillTest#plugConflictDetectedEvenWhenHubHasSpareCapacity` | **CAUGHT (PASS)** |
+| 12 | `TripTimingValidator:pickupTimeMismatch` | `TripTimingValidator.java` | `PlanValidatorTimingAndCapacityTest#tripTimingStartViolation` | **CAUGHT (PASS)** |
+| 13 | `TripTimingValidator:minDropoffDuration` | `TripTimingValidator.java` | `CheckDeletionProbeKillTest#tripDropoffBeforeEstimatedTripDurationRejected` | **CAUGHT (PASS)** |
+| 14 | `AssignmentValidator:doubleAssignment` | `AssignmentValidator.java` | `PlanValidatorMutationFuzzTest#singleRandomFieldCorruptionAlwaysProducesExpectedViolation` | **CAUGHT (PASS)** |
+
+**Probe Score:** **14 / 14 checks verified (100% detection rate)**.
+
+---
+
+## 5. Fuzz and Claims Verification
+
+Implemented in [`PlanValidatorMutationFuzzTest.java`](file://ev-validator/src/test/java/com/moveinsync/ev/validator/PlanValidatorMutationFuzzTest.java):
+1. **Known-Valid Plans Invariance:** $2,000$ randomized valid fleet plans generated across various fleet sizes (1 to 10 vehicles) and trip counts; $100\%$ validated as clean (`report.isValid() == true`, 0 violations).
+2. **Single-Field Corruption Fuzzing:** $3,000$ randomized single-field corruptions (shaving 1 Wh, shifting 1 s, under-duration charging, double assignment, departure SoC mismatch); $100\%$ detected as invalid with the exact matching `RuleId`.
+3. **Session Cost Boundary Rejection:** Added named tests in `PlanValidatorTimingAndCapacityTest.java`:
+   - `sessionCostPlusOneMicroUnitRejected`: exact tariff cost $+ 1$ micro-unit $	o$ rejected with `RuleId.COST_MISMATCH`.
+   - `sessionCostMinusOneMicroUnitRejected`: exact tariff cost $- 1$ micro-unit $	o$ rejected with `RuleId.COST_MISMATCH`.
+
+---
+
+## 6. Build and Quality Gates Verification
+
+1. **Error Prone 2.31.0:** Configured in `pom.xml` with `-Xplugin:ErrorProne`, `-XDcompilePolicy=simple`, `--should-stop=ifError=FLOW`, and `-Werror`. Actively caught real integer-math bug in `TariffCostValidatorDifferentialTest` and unused variables.
+2. **Clean JMH Scoping in `ev-bench`:** `jmh-generator-annprocess` was scoped specifically to `default-compile` execution, preventing processor leak into `testCompile` and cleanly eliminating `-proc:none`.
+3. **`verify.sh` Enhancements:**
+   - Tracks skipped steps and outputs `PASSED WITH N SKIPPED STEPS`.
+   - Automatically fails in CI if container environment is unreachable.
+   - Enforces test method assertion check (Check 3l): every `@Test` and `@ParameterizedTest` is verified via Python AST to contain at least one assertion.
+
+---
+
+## 7. Per-Commit Health and History Invariance
+
+1. **Per-Commit Verification:** Every commit on `fix/phase2-remediation` was verified by the pre-commit hook which executes `./scripts/verify.sh`. All 12 commits passed with zero warnings, zero lint errors, and 100% green tests.
+2. **Strict History Linearity:** `git merge-base --is-ancestor <hash> HEAD` was verified for all commit hashes from `FINDING_MAP.md` (including `d6a23c9`, `56bf883`, `c1e321e`, and `e27f343`). Output: `All hashes are strict ancestors of HEAD: True`. History was never squashed or rewritten.
+3. **Clean Tree Status:** Benchmark tests write execution reports to `target/reports/` by default, keeping `git status` completely clean after benchmark runs.
+
+---
+
+## 8. Coverage-Padding Verification
+
+Audit of coverage test classes confirmed zero empty assertions or coverage padding:
+- `DomainCoverageTest`: 5 test methods containing **84 AssertJ assertions**.
+- `ValidatorCoverageTest`: 3 test methods containing **38 AssertJ assertions**.
+- `ValidatorSubEngineCoverageTest`: 3 test methods containing **6 AssertJ assertions** (including killing probe mutant 1).
+- CI Check 3l guarantees that any unasserted test method immediately fails the build.
+
+---
+
+## 9. Strict Ground Truth Architecture Proof
+
+1. **Reflection Verification:** `ValidationInputInvariantsTest#proofNoPublicConstructorForValidationInput` verifies via Java reflection that `ValidationInput` contains **zero public constructors**, enforcing instantiation exclusively via `ValidationInput.builder()`.
+2. **Layered Invariant Enforcement:**
+   - Vehicle battery capacity $> 0$: enforced in `Vehicle.java` constructor (`ValidationInputInvariantsTest#vehicleRejectsNonPositiveCapacity`).
+   - Vehicle nominal consumption $> 0$: enforced in `Vehicle.java` constructor (`ValidationInputInvariantsTest#vehicleRejectsNonPositiveConsumption`).
+   - Charger max power $> 0$: enforced in `Charger.java` constructor (`ValidationInputInvariantsTest#chargerRejectsNonPositivePower`).
+   - Trip distance $\ge 0$: enforced in `Trip.java` constructor (`ValidationInputInvariantsTest#tripRejectsNegativeDistance`).
+   - Trip dropoff $\le$ latest finish: enforced in `Trip.java` constructor (`ValidationInputInvariantsTest#tripRejectsDropoffExceedingDeadline`).
+   - Hub ZoneId non-null: enforced in `Hub.java` constructor (`ValidationInputInvariantsTest#hubRejectsNullZone`).
+   - Inverted horizon start $>$ end: enforced in `ValidationInputBuilder` (`ValidationInputInvariantsTest#validationInputRejectsInvertedHorizon`).
+
+---
+
+## 10. Config and Conventions
+
+1. **Typed `ChargingCurveConfig` (D15):** Created `ChargingCurveConfig(int fastThresholdPercent, int slowRatePercent)` record with $[1, 99]$ percentage range validation and `defaultConfig()` factory (80% fast threshold, 50% slow rate). `ChargingCurve` accepts this configuration via constructor.
+2. **README.md Physics Specification:** Added Section 3.2 to `README.md` detailing the discrete integer second charging curve physics equations.
+3. **Decisions D8, D9, D10 Named Tests:**
+   - D8 (Deadhead factor): tested in `IndependentGoldenPhysicsTest` with traffic and AC factor hand arithmetic.
+   - D9 (Idle dissipation 0 W): tested in `ValidatorBoundaryAndMutantKillTest#idlePowerDissipationZeroWattsIsValid` and `#idlePowerDissipationPositiveWattsDischargesBattery`.
+   - D10 (Horizon containment): tested in `ValidationInputInvariantsTest#validationInputRejectsInvertedHorizon` and `PlanReferentialIntegrityValidatorTest`.
+
+---
+
+# PART C: Revised Phase 3 Architecture and Plan
+
+Prior to starting Phase 3 (`ev-planner-core`), the following revised design addresses all architectural requirements (a)–(g).
+
+### Architectural Requirements (a)–(g)
+- **(a) Pure Java Solver (`ev-planner-core`):** Zero imports from Spring, JPA, Kafka, Jackson, or `ev-validator`. Enforced strictly by ArchUnit (`PlannerArchitectureTest`).
+- **(b) Deterministic Planning:** Seeded PRNG (`SplittableRandom`), plan input hash stored in `FleetPlan`, zero wall-clock dependencies, deterministic sorting across all entity collections before solving.
+- **(c) In-Solver Robustness Margin (D14):** Planner enforces an effective battery floor of $\ge 17-18\%$ (configurable), ensuring plans safely clear the validator's hard $15\%$ floor (H1).
+- **(d) ALNS Ladder and Re-Planning:**
+  - **Tier 0 (< 100 ms):** Local patch swapping next assignment or shifting departure.
+  - **Tier 1 (<= 1.5 s):** Ring-expanding LNS around affected vehicle and adjacent hub chargers.
+  - **Tier 2 (Background):** Full ALNS polish with change budget.
+  - **Safe Patch:** Guaranteed fallback routing unassigned trips to backup while preserving invariants H1–H6.
+- **(e) Big-O Javadoc Documentation:** Every solver operator documents its asymptotic time and space complexity in Javadoc.
+- **(f) Flow Re-Timer and Continuous Plug Assignment:** Continuous event-sweep for physical charger allocation without discrete-time oversubscription.
+- **(g) Publication Gate:** Validator runs as an independent verification gate in `ev-service` before committing or publishing any plan head.
+
+### Proposed Sub-Phase Breakdown
+
+```
+Phase 3a: Solver Core Models & Interfaces
+├── Input models: PlannerInput, SolverConfig, ObjectiveWeights
+├── Interfaces: FleetSolver, ReplanSolver, DestroyOperator, RepairOperator
+└── Exit Test: PlannerArchitectureTest passes; empty solver compiles without frameworks
+
+Phase 3b: ALNS Construction & Operators
+├── Heuristics: Greedy insertion, Regret-2, Regret-3
+├── Destroy: RandomTripRemoval, WorstCostRemoval, ShawRemoval (with freeze lock window)
+└── Exit Test: 20-cab baseline scenario solves with 100% validator pass rate
+
+Phase 3c: Flow Re-Timer & Charger Assignment
+├── Discrete-to-continuous charger assignment
+├── Multi-hub continuous capacity flow re-timer
+└── Exit Test: 0 charger double-bookings, 100% H2 compliance under heavy hub demand
+
+Phase 3d: Re-Plan Ladder & Drift Response
+├── Drift injector & battery-drift handler (22% vs 41% scenario)
+├── Tier 0/1/2 ladder with <= 1.5s deadline and change budget
+└── Exit Test: 22%-vs-41% scenario re-plans in < 2.0s with <= 2 assignment changes
+
+Phase 3e: Scale & Lower Bounds
+├── Lower-bound relaxation engine (LP/min-flow lower bound)
+├── 300-cab / 40-charger / 1,500-trip scale benchmark
+└── Exit Test: 300-cab scenario solves in < 30s with committed validator report
+```
