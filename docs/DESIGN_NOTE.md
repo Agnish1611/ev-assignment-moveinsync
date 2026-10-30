@@ -2,7 +2,7 @@
 
 Two web instances serve one fleet database. A plan becomes the head only after an independent validator accepts it. The packaged processes accept events and serve reads. They do not run the solver.
 
-## Shape
+## Deployment
 
 ```mermaid
 flowchart LR
@@ -75,4 +75,4 @@ The objective is fewer backup trips, then the change penalty times the number of
 
 ## Left out
 
-The web process does not assemble a fleet from the admin tables, so it does not start the ladder. Doing so would acknowledge triggers it cannot solve. There is no circuit breaker and no `Retry-After` on a database failure. The response is `STORE_FAILED`. Traces stay in the process. There is no collector. The distance cache is not passed into the solver. Compose is the deployment. There is no Kubernetes manifest and no second region. The routing provider, learned consumption model, and Debezium connector from the architecture are not in this build. The outbox pump is the publisher for rows a worker has already committed.
+The web process does not assemble a fleet from the admin tables, so it does not start the ladder. Doing so would acknowledge triggers it cannot solve. There is no circuit breaker and no `Retry-After` on a database failure. The response is `STORE_FAILED`. Traces stay in the process. There is no collector. The distance cache is not passed into the solver. Compose is the deployment. There is no Kubernetes manifest and no second region. There is no learned consumption model, no external routing engine, and no Debezium connector. The outbox pump publishes rows a worker has already committed.

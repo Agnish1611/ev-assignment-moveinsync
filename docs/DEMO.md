@@ -1,6 +1,6 @@
 # Demo
 
-Dev-only passwords. They are the ones in `docker-compose.yml` and `deploy/keycloak/ev-realm.json`.
+Local walkthrough of health, a catalog write, a plan job that does not publish, a battery event, and stopping one of the two instances. Passwords are the local defaults in `docker-compose.yml` and `deploy/keycloak/ev-realm.json`.
 
 ## Start
 

@@ -1,4 +1,4 @@
-# Proof latency
+# Latency
 
 Numbers below are from runs on 2026-10-31. They are not the 300-cab solve. That solve stays in `PLANNER_300CAB_REPORT.md` at 24.258 s.
 
