@@ -56,12 +56,14 @@ class ChargingCurveTest {
     long duration = curve.calculateDurationSeconds(20_000L, 45_000L, capacityWh, plugPower50Kw);
     assertThat(duration).isEqualTo(2_160L);
 
-    // Verify additivity across the boundary:
+    // Verify fast and slow parts match exact hand-computed values:
     long fastDuration =
         curve.calculateDurationSeconds(20_000L, threshold80Wh, capacityWh, plugPower50Kw);
     long slowDuration =
         curve.calculateDurationSeconds(threshold80Wh, 45_000L, capacityWh, plugPower50Kw);
-    assertThat(duration).isEqualTo(fastDuration + slowDuration);
+    assertThat(fastDuration).isEqualTo(1_440L);
+    assertThat(slowDuration).isEqualTo(720L);
+    assertThat(duration).isEqualTo(2_160L);
   }
 
   @Test
