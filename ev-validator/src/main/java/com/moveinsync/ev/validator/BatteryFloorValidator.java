@@ -1,5 +1,6 @@
 package com.moveinsync.ev.validator;
 
+import com.moveinsync.ev.domain.hub.Charger;
 import com.moveinsync.ev.domain.hub.Hub;
 import com.moveinsync.ev.domain.location.Location;
 import com.moveinsync.ev.domain.schedule.ChargingSession;
@@ -8,13 +9,17 @@ import com.moveinsync.ev.domain.schedule.TripAssignment;
 import com.moveinsync.ev.domain.schedule.VehicleSchedule;
 import com.moveinsync.ev.domain.trip.Trip;
 import com.moveinsync.ev.domain.vehicle.Vehicle;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Validates invariant H1: Vehicle State of Charge (SoC) never drops below the safety floor (15%
- * capacity) at any moment, including during empty deadhead drives.
+ * Validates invariant H1 (battery safety floor) and Decision D2 (strict energy conservation).
+ *
+ * <p>Energy values claimed in candidate schedules are never trusted. The validator recomputes State
+ * of Charge (SoC) independently at each step. Any discrepancy between claimed SoC and ground-truth
+ * accumulation produces {@link RuleId#CLAIMED_SOC_MISMATCH}.
  */
 final class BatteryFloorValidator {
 
@@ -29,7 +34,6 @@ final class BatteryFloorValidator {
     Vehicle vehicle = schedule.vehicle();
     long floorWh = vehicle.calculateFloorSocWh(context.batteryFloorPercentage());
 
-    // Check initial vehicle state
     if (schedule.initialSocWh() < floorWh) {
       violations.add(
           PlanViolation.ofVehicle(
@@ -77,29 +81,10 @@ final class BatteryFloorValidator {
       List<PlanViolation> violations) {
     Trip trip = assign.trip();
 
-    // 1. Deadhead to pickup
-    long deadheadEnergy =
-        calculateDeadheadEnergy(currentLocation, trip.fromLocation(), vehicle, assign);
-    long arrivalSocWh = currentSocWh - deadheadEnergy;
+    long arrivalSocWh =
+        validateDeadheadToPickup(
+            assign, vehicle, floorWh, currentLocation, currentSocWh, violations);
 
-    if (arrivalSocWh < floorWh) {
-      violations.add(
-          PlanViolation.ofTrip(
-              RuleId.H1_BATTERY_FLOOR,
-              trip.id(),
-              vehicle.id(),
-              trip.startTs(),
-              "Vehicle "
-                  + vehicle.id()
-                  + " SoC ("
-                  + arrivalSocWh
-                  + " Wh) drops below floor ("
-                  + floorWh
-                  + " Wh) upon deadhead arrival at pickup for trip "
-                  + trip.id()));
-    }
-
-    // 2. Trip execution
     long tripEnergy =
         context
             .consumptionModel()
@@ -123,7 +108,82 @@ final class BatteryFloorValidator {
                   + trip.id()));
     }
 
-    return assign.departureAfterDropoffSocWh();
+    if (assign.departureAfterDropoffSocWh() != dropoffSocWh) {
+      violations.add(
+          PlanViolation.ofTrip(
+              RuleId.CLAIMED_SOC_MISMATCH,
+              trip.id(),
+              vehicle.id(),
+              assign.dropoffTime(),
+              "Claimed departure SoC ("
+                  + assign.departureAfterDropoffSocWh()
+                  + " Wh) does not match recomputed dropoff SoC ("
+                  + dropoffSocWh
+                  + " Wh) for trip "
+                  + trip.id()));
+    }
+
+    return dropoffSocWh;
+  }
+
+  private long validateDeadheadToPickup(
+      TripAssignment assign,
+      Vehicle vehicle,
+      long floorWh,
+      Location currentLocation,
+      long currentSocWh,
+      List<PlanViolation> violations) {
+    Trip trip = assign.trip();
+    long deadheadEnergy =
+        calculateDeadheadEnergy(currentLocation, trip.fromLocation(), vehicle, assign.pickupTime());
+    long arrivalSocWh = currentSocWh - deadheadEnergy;
+
+    if (assign.deadheadEnergyWh() != deadheadEnergy) {
+      violations.add(
+          PlanViolation.ofTrip(
+              RuleId.CLAIMED_SOC_MISMATCH,
+              trip.id(),
+              vehicle.id(),
+              assign.pickupTime(),
+              "Claimed deadhead energy ("
+                  + assign.deadheadEnergyWh()
+                  + " Wh) does not match recomputed deadhead energy ("
+                  + deadheadEnergy
+                  + " Wh)"));
+    }
+
+    if (assign.arrivalAtPickupSocWh() != arrivalSocWh) {
+      violations.add(
+          PlanViolation.ofTrip(
+              RuleId.CLAIMED_SOC_MISMATCH,
+              trip.id(),
+              vehicle.id(),
+              assign.pickupTime(),
+              "Claimed arrival SoC ("
+                  + assign.arrivalAtPickupSocWh()
+                  + " Wh) does not match recomputed arrival SoC ("
+                  + arrivalSocWh
+                  + " Wh)"));
+    }
+
+    if (arrivalSocWh < floorWh) {
+      violations.add(
+          PlanViolation.ofTrip(
+              RuleId.H1_BATTERY_FLOOR,
+              trip.id(),
+              vehicle.id(),
+              trip.startTs(),
+              "Vehicle "
+                  + vehicle.id()
+                  + " SoC ("
+                  + arrivalSocWh
+                  + " Wh) drops below floor ("
+                  + floorWh
+                  + " Wh) upon deadhead arrival at pickup for trip "
+                  + trip.id()));
+    }
+
+    return arrivalSocWh;
   }
 
   private long validateChargingSession(
@@ -137,40 +197,30 @@ final class BatteryFloorValidator {
     if (hubOpt.isEmpty()) {
       violations.add(
           PlanViolation.ofHub(
-              RuleId.H2_CHARGER_CAPACITY,
+              RuleId.UNKNOWN_HUB,
               session.hubId(),
               session.startTime(),
               "Charging session references unknown hub: " + session.hubId()));
-      return session.targetSocWh();
+      return currentSocWh;
     }
 
-    Location hubLocation = hubOpt.get().location();
-    if (!currentLocation.id().equals(hubLocation.id())) {
-      int dist =
-          context
-              .distanceProvider()
-              .getDistanceAndDuration(currentLocation, hubLocation)
-              .distanceMeters();
-      long deadheadEnergy =
-          context
-              .consumptionModel()
-              .calculateEnergyWh(vehicle, dist, session.startTime(), context.acOn());
-      long arrivalAtHubSoc = currentSocWh - deadheadEnergy;
-      if (arrivalAtHubSoc < floorWh) {
-        violations.add(
-            PlanViolation.ofVehicle(
-                RuleId.H1_BATTERY_FLOOR,
-                vehicle.id(),
-                session.startTime(),
-                "Vehicle "
-                    + vehicle.id()
-                    + " SoC ("
-                    + arrivalAtHubSoc
-                    + " Wh) drops below floor ("
-                    + floorWh
-                    + " Wh) driving to hub "
-                    + session.hubId()));
-      }
+    long arrivalAtHubSoc =
+        validateDeadheadToHub(
+            session, vehicle, floorWh, currentLocation, currentSocWh, hubOpt.get(), violations);
+
+    if (session.startSocWh() != arrivalAtHubSoc) {
+      violations.add(
+          PlanViolation.ofVehicle(
+              RuleId.CLAIMED_SOC_MISMATCH,
+              vehicle.id(),
+              session.startTime(),
+              "Session "
+                  + session.sessionId()
+                  + " claimed start SoC ("
+                  + session.startSocWh()
+                  + " Wh) does not match arrival SoC at hub ("
+                  + arrivalAtHubSoc
+                  + " Wh)"));
     }
 
     if (session.startSocWh() < floorWh) {
@@ -203,19 +253,85 @@ final class BatteryFloorValidator {
                   + " Wh)"));
     }
 
-    return session.targetSocWh();
+    Optional<Charger> chargerOpt = context.findCharger(session.chargerId());
+    int chargerPowerKw = chargerOpt.map(Charger::powerKw).orElse(vehicle.maxChargeKw());
+    int effectivePowerKw = Math.min(chargerPowerKw, vehicle.maxChargeKw());
+    long maxCurveSoc =
+        context
+            .chargingCurve()
+            .calculateTargetSocWh(
+                arrivalAtHubSoc,
+                session.durationSeconds(),
+                vehicle.batteryCapacityWh(),
+                effectivePowerKw);
+
+    if (session.targetSocWh() > maxCurveSoc) {
+      violations.add(
+          PlanViolation.ofVehicle(
+              RuleId.CLAIMED_SOC_MISMATCH,
+              vehicle.id(),
+              session.endTime(),
+              "Session "
+                  + session.sessionId()
+                  + " claimed target SoC ("
+                  + session.targetSocWh()
+                  + " Wh) exceeds curve delivery ("
+                  + maxCurveSoc
+                  + " Wh)"));
+    }
+
+    return Math.min(maxCurveSoc, session.targetSocWh());
+  }
+
+  private long validateDeadheadToHub(
+      ChargingSession session,
+      Vehicle vehicle,
+      long floorWh,
+      Location currentLocation,
+      long currentSocWh,
+      Hub hub,
+      List<PlanViolation> violations) {
+    Location hubLocation = hub.location();
+    if (currentLocation.id().equals(hubLocation.id())) {
+      return currentSocWh;
+    }
+
+    int dist =
+        context
+            .distanceProvider()
+            .getDistanceAndDuration(currentLocation, hubLocation)
+            .distanceMeters();
+    long deadheadEnergy =
+        context
+            .consumptionModel()
+            .calculateEnergyWh(vehicle, dist, session.startTime(), context.acOn());
+    long arrivalAtHubSoc = currentSocWh - deadheadEnergy;
+
+    if (arrivalAtHubSoc < floorWh) {
+      violations.add(
+          PlanViolation.ofVehicle(
+              RuleId.H1_BATTERY_FLOOR,
+              vehicle.id(),
+              session.startTime(),
+              "Vehicle "
+                  + vehicle.id()
+                  + " SoC ("
+                  + arrivalAtHubSoc
+                  + " Wh) drops below floor ("
+                  + floorWh
+                  + " Wh) driving to hub "
+                  + session.hubId()));
+    }
+
+    return arrivalAtHubSoc;
   }
 
   private long calculateDeadheadEnergy(
-      Location from, Location to, Vehicle vehicle, TripAssignment assign) {
+      Location from, Location to, Vehicle vehicle, Instant startTime) {
     if (from.id().equals(to.id())) {
       return 0L;
     }
     int dist = context.distanceProvider().getDistanceAndDuration(from, to).distanceMeters();
-    long calculated =
-        context
-            .consumptionModel()
-            .calculateEnergyWh(vehicle, dist, assign.activityStartTime(), context.acOn());
-    return Math.max(calculated, assign.deadheadEnergyWh());
+    return context.consumptionModel().calculateEnergyWh(vehicle, dist, startTime, context.acOn());
   }
 }

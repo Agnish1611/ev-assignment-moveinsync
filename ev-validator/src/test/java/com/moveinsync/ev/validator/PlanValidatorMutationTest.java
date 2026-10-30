@@ -579,4 +579,167 @@ class PlanValidatorMutationTest {
     assertThat(report.isValid()).isFalse();
     assertThat(report.violationsFor(RuleId.H6_CHARGING_CURVE)).isNotEmpty();
   }
+
+  @Test
+  @DisplayName("Mutation 12: Raising claimed departure SoC after dropoff by 1 Wh is caught (D2)")
+  void mutationRaiseDepartureSocAfterDropoffBy1Wh() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Instant tPickup = t0.plusSeconds(600);
+    Instant tDropoff = tPickup.plusSeconds(1200);
+
+    // Initial 50,000 Wh - 750 Wh deadhead = 49,250 Wh arrival.
+    // 49,250 Wh - 1,500 Wh trip = 47,750 Wh true dropoff SoC.
+    // Claim 47,751 Wh (+1 Wh phantom energy claim)
+    TripAssignment forgedAssign =
+        new TripAssignment(
+            baselineTrip, cab1.id(), tPickup, tDropoff, 5_000, 600, 750L, 49_250L, 47_751L);
+
+    VehicleSchedule mutatedSchedule =
+        new VehicleSchedule(cab1, hub1Loc, 50_000L, t0, List.of(forgedAssign));
+
+    FleetPlan mutatedPlan =
+        new FleetPlan(
+            "PLAN-MUT-12",
+            "tenant-1",
+            t0,
+            t0.plusSeconds(7200),
+            List.of(mutatedSchedule),
+            List.of(),
+            999L,
+            "hash-mut-12");
+
+    ValidationReport report = validator.validate(mutatedPlan);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.CLAIMED_SOC_MISMATCH)).isNotEmpty();
+  }
+
+  @Test
+  @DisplayName("Mutation 13: Raising session start SoC above arrival SoC at hub is caught (D2)")
+  void mutationRaiseSessionStartSocAboveArrivalSocAtHub() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Instant tPickup = t0.plusSeconds(600);
+    Instant tDropoff = tPickup.plusSeconds(1200);
+
+    TripAssignment assign =
+        new TripAssignment(
+            baselineTrip, cab1.id(), tPickup, tDropoff, 5_000, 600, 750L, 49_250L, 47_750L);
+
+    Instant tChargeStart = tDropoff.plusSeconds(600);
+    Instant tChargeEnd = tChargeStart.plusSeconds(1080);
+
+    // Arrival at hub is 47,750 - 750 = 47,000 Wh.
+    // Forged session claims starting at 47,001 Wh!
+    ChargingSession forgedSession =
+        new ChargingSession(
+            "SESS-FORGED-START",
+            cab1.id(),
+            hub1.id(),
+            charger1.id(),
+            tChargeStart,
+            tChargeEnd,
+            47_001L,
+            55_000L,
+            750_000L);
+
+    VehicleSchedule mutatedSchedule =
+        new VehicleSchedule(cab1, hub1Loc, 50_000L, t0, List.of(assign, forgedSession));
+
+    FleetPlan mutatedPlan =
+        new FleetPlan(
+            "PLAN-MUT-13",
+            "tenant-1",
+            t0,
+            t0.plusSeconds(7200),
+            List.of(mutatedSchedule),
+            List.of(),
+            999L,
+            "hash-mut-13");
+
+    ValidationReport report = validator.validate(mutatedPlan);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.CLAIMED_SOC_MISMATCH)).isNotEmpty();
+  }
+
+  @Test
+  @DisplayName(
+      "Mutation 14: Phantom energy scenario (cab arrives with 10k Wh, claims 50k Wh start) is caught and killed (D2)")
+  void mutationPhantomEnergyInjectionAtHub() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Instant tChargeStart = t0.plusSeconds(600);
+    Instant tChargeEnd = tChargeStart.plusSeconds(1080);
+
+    // Cab starts at remote pickup location with 10,750 Wh.
+    // Deadhead to hub uses 750 Wh -> arrival at hub is 10,000 Wh.
+    // Session claims startSocWh = 50,000 Wh (injecting 40 kWh of phantom energy!)
+    ChargingSession phantomSession =
+        new ChargingSession(
+            "SESS-PHANTOM",
+            cab1.id(),
+            hub1.id(),
+            charger1.id(),
+            tChargeStart,
+            tChargeEnd,
+            50_000L,
+            55_000L,
+            750_000L);
+
+    VehicleSchedule mutatedSchedule =
+        new VehicleSchedule(cab1, pickupLoc, 10_750L, t0, List.of(phantomSession));
+
+    FleetPlan mutatedPlan =
+        new FleetPlan(
+            "PLAN-MUT-14",
+            "tenant-1",
+            t0,
+            t0.plusSeconds(7200),
+            List.of(mutatedSchedule),
+            List.of(),
+            999L,
+            "hash-mut-14");
+
+    ValidationReport report = validator.validate(mutatedPlan);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.CLAIMED_SOC_MISMATCH)).isNotEmpty();
+  }
+
+  @Test
+  @DisplayName(
+      "Mutation 15: Raising session end SoC above curve delivery produces CLAIMED_SOC_MISMATCH (D2)")
+  void mutationRaiseSessionEndSocAboveCurveDelivery() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Instant tChargeStart = t0.plusSeconds(600);
+    // 72 seconds at 50 kW charges from 47,000 Wh to 48,000 Wh
+    Instant tChargeEnd = tChargeStart.plusSeconds(72);
+
+    // Session claims ending at 49,000 Wh (1,000 Wh above the 48,000 Wh delivered by curve in 72s)
+    ChargingSession inflatedEndSession =
+        new ChargingSession(
+            "SESS-INFLATED-END",
+            cab1.id(),
+            hub1.id(),
+            charger1.id(),
+            tChargeStart,
+            tChargeEnd,
+            47_000L,
+            49_000L,
+            750_000L);
+
+    VehicleSchedule mutatedSchedule =
+        new VehicleSchedule(cab1, hub1Loc, 47_000L, t0, List.of(inflatedEndSession));
+
+    FleetPlan mutatedPlan =
+        new FleetPlan(
+            "PLAN-MUT-15",
+            "tenant-1",
+            t0,
+            t0.plusSeconds(7200),
+            List.of(mutatedSchedule),
+            List.of(),
+            999L,
+            "hash-mut-15");
+
+    ValidationReport report = validator.validate(mutatedPlan);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.CLAIMED_SOC_MISMATCH)).isNotEmpty();
+  }
 }
