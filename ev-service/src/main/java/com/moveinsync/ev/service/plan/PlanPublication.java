@@ -3,7 +3,11 @@ package com.moveinsync.ev.service.plan;
 import com.moveinsync.ev.domain.schedule.FleetPlan;
 import com.moveinsync.ev.domain.schedule.RouteActivity;
 import com.moveinsync.ev.domain.schedule.TripAssignment;
+import com.moveinsync.ev.domain.schedule.UnassignedReasonCode;
+import com.moveinsync.ev.domain.schedule.UnassignedTrip;
 import com.moveinsync.ev.domain.schedule.VehicleSchedule;
+import com.moveinsync.ev.service.observe.PublishObserver;
+import com.moveinsync.ev.service.observe.PublishedSample;
 import com.moveinsync.ev.service.repository.PlanHeadRepository;
 import com.moveinsync.ev.service.repository.PlanReadRepository;
 import com.moveinsync.ev.validator.PlanValidator;
@@ -12,7 +16,9 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -32,13 +38,24 @@ public final class PlanPublication {
   private final PlanHeadRepository heads;
   private final PlanReadRepository reads;
   private final Clock clock;
+  private final PublishObserver observer;
 
   public PlanPublication(
       PlanValidator validator, PlanHeadRepository heads, PlanReadRepository reads, Clock clock) {
+    this(validator, heads, reads, clock, PublishObserver.none());
+  }
+
+  public PlanPublication(
+      PlanValidator validator,
+      PlanHeadRepository heads,
+      PlanReadRepository reads,
+      Clock clock,
+      PublishObserver observer) {
     this.validator = Objects.requireNonNull(validator, "validator must not be null");
     this.heads = Objects.requireNonNull(heads, "heads must not be null");
     this.reads = Objects.requireNonNull(reads, "reads must not be null");
     this.clock = Objects.requireNonNull(clock, "clock must not be null");
+    this.observer = Objects.requireNonNull(observer, "observer must not be null");
   }
 
   public PublishResult publish(DataSource dataSource, PublishCommand command) {
@@ -49,11 +66,14 @@ public final class PlanPublication {
     }
     ValidationReport report = validator.validate(command.groundTruth(), command.plan());
     if (!report.isValid()) {
+      observer.rejected();
       return new PublishResult(PublishOutcome.REJECTED, 0L, report);
     }
     try (Connection connection = dataSource.getConnection()) {
       connection.setAutoCommit(false);
-      return write(connection, command, report);
+      PublishResult result = write(connection, command, report);
+      observe(result, command);
+      return result;
     } catch (SQLException ex) {
       throw new PlanStoreException("plan publication failed", ex);
     }
@@ -178,6 +198,31 @@ public final class PlanPublication {
       return new PublishResult(PublishOutcome.REPLAYED, existing.orElseThrow(), report);
     }
     return new PublishResult(PublishOutcome.CONFLICT, head.orElse(0L), report);
+  }
+
+  private void observe(PublishResult result, PublishCommand command) {
+    if (result.outcome() == PublishOutcome.PUBLISHED) {
+      observer.published(
+          new PublishedSample(
+              command.tier(),
+              command.durationMillis(),
+              command.plan().totalUnassignedTrips(),
+              command.plan().totalChargingCostMicros(),
+              command.flowLowerBoundMicros(),
+              reasons(command)));
+      return;
+    }
+    if (result.outcome() == PublishOutcome.CONFLICT) {
+      observer.conflict();
+    }
+  }
+
+  private static List<UnassignedReasonCode> reasons(PublishCommand command) {
+    List<UnassignedReasonCode> found = new ArrayList<>();
+    for (UnassignedTrip trip : command.plan().unassignedTrips()) {
+      found.add(trip.reasonCode());
+    }
+    return found;
   }
 
   private static Map<String, String> after(FleetPlan plan) {

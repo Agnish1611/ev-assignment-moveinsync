@@ -82,6 +82,11 @@ public final class KafkaMessageBus implements MessageBus {
   }
 
   @Override
+  public long consumerLag() {
+    return poller.recordsLag();
+  }
+
+  @Override
   public void close() {
     poller.close();
     producer.close(Duration.ofMillis(settings.sendTimeoutMillis()));

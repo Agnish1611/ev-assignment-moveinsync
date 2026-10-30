@@ -16,6 +16,7 @@ message Envelope {
     ChargerStatus charger_status = 11;
     PlanTrigger plan_trigger = 12;
     PlanPublished plan_published = 13;
+    ConfigChanged config_changed = 14;
   }
 }
 
@@ -43,4 +44,9 @@ message PlanTrigger {
 message PlanPublished {
   string shard = 1;
   int64 version = 2;
+}
+
+message ConfigChanged {
+  string kind = 1;
+  string subject_id = 2;
 }

@@ -43,7 +43,8 @@ public record Envelope(
   }
 
   /** One body. Coordinates are not part of the contract. */
-  public sealed interface Payload permits Telemetry, ChargerStatus, PlanTrigger, PlanPublished {}
+  public sealed interface Payload
+      permits Telemetry, ChargerStatus, PlanTrigger, PlanPublished, ConfigChanged {}
 
   /** Cab energy in watt-hours. */
   public record Telemetry(String cabId, long socWh) implements Payload {
@@ -87,6 +88,14 @@ public record Envelope(
       if (version <= 0L) {
         throw new IllegalArgumentException("version must be positive");
       }
+    }
+  }
+
+  /** A catalog write. The subject is an opaque id, never a coordinate. */
+  public record ConfigChanged(String kind, String subjectId) implements Payload {
+    public ConfigChanged {
+      requireOpaque(kind, "kind");
+      requireOpaque(subjectId, "subjectId");
     }
   }
 

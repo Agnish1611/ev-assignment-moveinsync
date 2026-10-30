@@ -10,6 +10,7 @@ public final class Topics {
   public static final String CHARGER_STATUS = "ev.charger-status.v1";
   public static final String PLAN_TRIGGERS = "ev.plan-triggers.v1";
   public static final String PLAN_EVENTS = "ev.plan-events.v1";
+  public static final String CONFIG = "ev.config.v1";
 
   private Topics() {
     throw new IllegalStateException("utility");

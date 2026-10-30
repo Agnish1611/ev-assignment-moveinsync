@@ -23,6 +23,7 @@ public final class EnvelopeCodec {
   private static final int CHARGER = 11;
   private static final int TRIGGER = 12;
   private static final int PUBLISHED = 13;
+  private static final int CONFIG = 14;
 
   private EnvelopeCodec() {
     throw new IllegalStateException("utility");
@@ -74,6 +75,7 @@ public final class EnvelopeCodec {
           case CHARGER -> payload = readCharger(in.readByteArray());
           case TRIGGER -> payload = readTrigger(in.readByteArray());
           case PUBLISHED -> payload = readPublished(in.readByteArray());
+          case CONFIG -> payload = readConfig(in.readByteArray());
           default -> in.skipField(tag);
         }
       }
@@ -101,6 +103,7 @@ public final class EnvelopeCodec {
       case Envelope.PlanTrigger trigger -> out.writeByteArray(TRIGGER, triggerBytes(trigger));
       case Envelope.PlanPublished published ->
           out.writeByteArray(PUBLISHED, publishedBytes(published));
+      case Envelope.ConfigChanged changed -> out.writeByteArray(CONFIG, configBytes(changed));
     }
   }
 
@@ -202,6 +205,29 @@ public final class EnvelopeCodec {
     OptionalLong reported = hasSoc ? OptionalLong.of(soc) : OptionalLong.empty();
     return new Envelope.PlanTrigger(
         kind, subject, shard, Instant.ofEpochSecond(seconds, nanos), reported);
+  }
+
+  private static byte[] configBytes(Envelope.ConfigChanged changed) throws IOException {
+    return nested(
+        out -> {
+          out.writeString(1, changed.kind());
+          out.writeString(2, changed.subjectId());
+        });
+  }
+
+  private static Envelope.ConfigChanged readConfig(byte[] bytes) throws IOException {
+    CodedInputStream in = CodedInputStream.newInstance(bytes);
+    String kind = "";
+    String subject = "";
+    while (!in.isAtEnd()) {
+      int tag = in.readTag();
+      switch (WireFormat.getTagFieldNumber(tag)) {
+        case 1 -> kind = in.readStringRequireUtf8();
+        case 2 -> subject = in.readStringRequireUtf8();
+        default -> in.skipField(tag);
+      }
+    }
+    return new Envelope.ConfigChanged(kind, subject);
   }
 
   private static Envelope.PlanPublished readPublished(byte[] bytes) throws IOException {

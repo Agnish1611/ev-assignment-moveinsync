@@ -28,7 +28,14 @@ public class ApiSecurity {
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(
-            auth -> auth.requestMatchers("/v1/**").authenticated().anyRequest().denyAll())
+            auth ->
+                auth.requestMatchers(
+                        "/actuator/health", "/actuator/health/**", "/actuator/prometheus")
+                    .permitAll()
+                    .requestMatchers("/v1/**")
+                    .authenticated()
+                    .anyRequest()
+                    .denyAll())
         .oauth2ResourceServer(
             oauth ->
                 oauth

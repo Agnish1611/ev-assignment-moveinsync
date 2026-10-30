@@ -1,9 +1,11 @@
 package com.moveinsync.ev.service.bus;
 
+import com.moveinsync.ev.service.observe.DeliveryObserver;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * At-least-once handling. A repeated sequence is ignored, an older sequence is dropped, and a
@@ -19,12 +21,23 @@ public final class Delivery {
   private final SeenSequences seen;
   private final Clock clock;
   private final BusSettings settings;
+  private final DeliveryObserver observer;
 
   public Delivery(MessageBus bus, SeenSequences seen, Clock clock, BusSettings settings) {
+    this(bus, seen, clock, settings, DeliveryObserver.none());
+  }
+
+  public Delivery(
+      MessageBus bus,
+      SeenSequences seen,
+      Clock clock,
+      BusSettings settings,
+      DeliveryObserver observer) {
     this.bus = bus;
     this.seen = seen;
     this.clock = clock;
     this.settings = settings;
+    this.observer = Objects.requireNonNull(observer, "observer must not be null");
   }
 
   public void install(String topic) {
@@ -52,7 +65,12 @@ public final class Delivery {
     }
     SeenSequences.Disposition disposition =
         seen.preview(envelope.tenant(), envelope.producer(), envelope.sequence());
-    if (disposition != SeenSequences.Disposition.ACCEPT) {
+    if (disposition == SeenSequences.Disposition.DUPLICATE) {
+      observer.duplicate();
+      return;
+    }
+    if (disposition == SeenSequences.Disposition.LATE) {
+      observer.late();
       return;
     }
     try {
@@ -78,11 +96,13 @@ public final class Delivery {
     int attempt = attempt(record);
     String origin = record.headers().getOrDefault(ORIGIN, record.topic());
     if (attempt >= 2) {
+      observer.deadLettered();
       bus.send(
           record.with(
               Topics.deadLetter(origin), headers(record, attempt, origin, clock.instant())));
       return;
     }
+    observer.retried();
     long delay = attempt == 0 ? settings.retryShortSeconds() : settings.retryLongSeconds();
     Instant due = clock.instant().plusSeconds(delay);
     String topic = attempt == 0 ? Topics.retryShort(origin) : Topics.retryLong(origin);

@@ -26,11 +26,13 @@ class EnvelopeCodecTest {
             3L,
             new Envelope.PlanTrigger("BATTERY", "CAB-1", "shift-1", AT, OptionalLong.of(13_200L)));
     Envelope published = envelope(4L, new Envelope.PlanPublished("shift-1", 8L));
+    Envelope changed = envelope(5L, new Envelope.ConfigChanged("HUB", "HUB-1"));
 
     assertThat(EnvelopeCodec.read(EnvelopeCodec.write(telemetry))).isEqualTo(telemetry);
     assertThat(EnvelopeCodec.read(EnvelopeCodec.write(charger))).isEqualTo(charger);
     assertThat(EnvelopeCodec.read(EnvelopeCodec.write(trigger))).isEqualTo(trigger);
     assertThat(EnvelopeCodec.read(EnvelopeCodec.write(published))).isEqualTo(published);
+    assertThat(EnvelopeCodec.read(EnvelopeCodec.write(changed))).isEqualTo(changed);
   }
 
   @Test

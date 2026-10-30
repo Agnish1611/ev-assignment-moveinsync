@@ -75,6 +75,15 @@ public final class MemoryMessageBus implements MessageBus {
   }
 
   @Override
+  public synchronized long queued() {
+    int count = deferred.size();
+    for (List<BusRecord> waiting : held.values()) {
+      count += waiting.size();
+    }
+    return count;
+  }
+
+  @Override
   public void close() {
     // Nothing to release. The records live only in this object.
   }

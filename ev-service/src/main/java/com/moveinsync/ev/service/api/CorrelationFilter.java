@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import org.slf4j.MDC;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /** Assigns a correlation id before authentication can fail. */
@@ -16,6 +17,11 @@ final class CorrelationFilter extends OncePerRequestFilter {
       throws ServletException, IOException {
     String correlation = Correlation.resolve(request);
     response.setHeader(Correlation.HEADER, correlation);
-    chain.doFilter(request, response);
+    MDC.put("correlationId", correlation);
+    try {
+      chain.doFilter(request, response);
+    } finally {
+      MDC.remove("correlationId");
+    }
   }
 }

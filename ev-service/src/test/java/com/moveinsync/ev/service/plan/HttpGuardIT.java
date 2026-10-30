@@ -38,6 +38,7 @@ class HttpGuardIT {
     registry.add("spring.security.oauth2.resourceserver.jwt.jwk-set-uri", TOKENS::jwkUri);
     registry.add("spring.flyway.enabled", () -> "false");
     registry.add("ev.api.rate-capacity", () -> "3");
+    registry.add("management.prometheus.metrics.export.enabled", () -> "true");
   }
 
   @AfterAll
@@ -97,5 +98,14 @@ class HttpGuardIT {
             get("/v1/plans/current").param("shard", "shard-rate").header("Authorization", operator))
         .andExpect(status().isTooManyRequests())
         .andExpect(jsonPath("$.code").value("RATE_LIMITED"));
+  }
+
+  @Test
+  void prometheusIsPublicAndHasNoPersonalData() throws Exception {
+    MvcResult result =
+        mvc.perform(get("/actuator/prometheus")).andExpect(status().isOk()).andReturn();
+    String body = result.getResponse().getContentAsString();
+    assertThat(body).contains("ev_queue_depth");
+    assertThat(body).doesNotContain("@");
   }
 }

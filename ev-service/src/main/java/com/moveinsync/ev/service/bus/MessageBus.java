@@ -20,6 +20,16 @@ public interface MessageBus extends AutoCloseable {
 
   void releaseDue(Instant now);
 
+  /** Records waiting in this process. A Kafka bus reports zero here and lag separately. */
+  default long queued() {
+    return 0L;
+  }
+
+  /** Sum of Kafka records-lag. An in-memory bus reports zero. */
+  default long consumerLag() {
+    return 0L;
+  }
+
   @Override
   void close();
 }

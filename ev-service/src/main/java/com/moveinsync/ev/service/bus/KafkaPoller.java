@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -39,6 +40,7 @@ final class KafkaPoller {
   private final Set<String> paused = ConcurrentHashMap.newKeySet();
   private final Map<String, Instant> deferredUntil = new ConcurrentHashMap<>();
   private final ConsumerRebalanceListener listener = new PauseListener();
+  private final AtomicLong recordsLag = new AtomicLong();
   private volatile Thread poller;
   private volatile RuntimeException failure;
 
@@ -60,6 +62,10 @@ final class KafkaPoller {
 
   Optional<RuntimeException> failure() {
     return Optional.ofNullable(failure);
+  }
+
+  long recordsLag() {
+    return recordsLag.get();
   }
 
   void subscribe(String topic, RecordHandler handler) {
@@ -122,6 +128,7 @@ final class KafkaPoller {
       for (ConsumerRecord<String, byte[]> record : records) {
         dispatch(record);
       }
+      recordsLag.set(ConsumerLag.total(consumer));
     } catch (WakeupException ex) {
       if (!running.get()) {
         running.set(false);

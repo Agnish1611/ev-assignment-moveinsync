@@ -1,0 +1,31 @@
+groups:
+  - name: ev-fleet
+    rules:
+      - alert: EvDeadLetters
+        expr: increase(ev_delivery_dlq_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: A record was dead-lettered
+      - alert: EvConsumerLag
+        expr: ev_consumer_lag > 100
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: Kafka consumer lag is high
+      - alert: EvDeadlineMisses
+        expr: increase(ev_deadline_misses_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: A replan missed its deadline
+      - alert: EvPlanStale
+        expr: ev_plan_version_age_seconds > 900
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: The published plan is older than 15 minutes
