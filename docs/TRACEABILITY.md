@@ -8,8 +8,8 @@ Traceability between case study requirements and verification evidence.
 | Minimise backups, then cost, with explanation | Objective tuple docs + tests + README trade-off section | Phase 4, 5, 7 |
 | Re-plan within 2 s, minimal changes | Drift scenario test + latency metrics + replan_run table | Phase 8 |
 | Charger failure re-plan | Charger-failure test | Phase 8 |
-| Why unassigned (reasons) | Counterfactual probe tests + reason-code docs | Phase 7 |
-| Per-cab timeline with SoC at each step | Timeline endpoint + tests | Phase 7, 11 |
+| Why unassigned (reasons) | Counterfactual probe tests + reason-code docs | `AssignmentDiagnosis` and `AssignmentDiagnosisTest`. Evidence is watt-hours and a UTC plug window (D25) |
+| Per-cab timeline with SoC at each step | Timeline endpoint + tests | Generator: `CabTimeline` and `CabTimelineTest`. HTTP endpoint remains Phase 11 |
 | Heuristic + complexity + lower bound | Javadoc Big-O + lower-bound report in `docs/reports/` | Phase 5, 6, 7 |
 | Independent validator run on every result | ArchUnit isolation test + validator invoked in publish path | Phase 0 & 2 complete & verified: `ValidatorArchitectureTest` (zero planner/framework imports), `ValidationInput` trust model, totality guard, zero warnings |
 | 300-cab case in < 30 s with report | Benchmark test + committed report | Planner solve: `BenchmarkScenarioTest` and `docs/reports/PLANNER_300CAB_REPORT.md`. Validator latency: `docs/reports/VALIDATION_300CAB_REPORT.md` |
