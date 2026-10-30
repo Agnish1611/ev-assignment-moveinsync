@@ -1,5 +1,6 @@
 package com.moveinsync.ev.validator;
 
+import com.moveinsync.ev.domain.hub.Charger;
 import com.moveinsync.ev.domain.hub.ChargerId;
 import com.moveinsync.ev.domain.hub.Hub;
 import com.moveinsync.ev.domain.hub.HubId;
@@ -16,11 +17,12 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Validates invariant H2: Concurrent charging sessions at a hub never exceed its physical charger
- * count at any second.
+ * Validates invariant H2 (concurrent charging sessions at a hub never exceed physical charger
+ * count) and Decision D4 (individual charger operational availability and plug conflict rules).
  *
- * <p>Implemented via an exact continuous event-sweep algorithm, completely independent of the
- * planner's discrete timeline resolution.
+ * <p>Continuous event sweep verifies hub physical plug limits. Individual charger verification
+ * ensures chargers are operational, not in outage windows, belong to the referenced hub, and are
+ * never booked concurrently on the same plug.
  */
 final class ChargerCapacityValidator {
 
@@ -44,7 +46,7 @@ final class ChargerCapacityValidator {
       if (hubOpt.isEmpty()) {
         violations.add(
             PlanViolation.ofHub(
-                RuleId.H2_CHARGER_CAPACITY,
+                RuleId.UNKNOWN_HUB,
                 hubId,
                 sessions.get(0).startTime(),
                 "Charging sessions assigned to unregistered hub: " + hubId));
@@ -52,6 +54,7 @@ final class ChargerCapacityValidator {
       }
 
       int capacity = hubOpt.get().chargerCount();
+      validateChargerAvailability(sessions, hubId, violations);
       validatePlugConflicts(sessions, hubId, violations);
       runEventSweep(sessions, hubId, capacity, violations);
     }
@@ -71,6 +74,57 @@ final class ChargerCapacityValidator {
     return map;
   }
 
+  private void validateChargerAvailability(
+      List<ChargingSession> sessions, HubId hubId, List<PlanViolation> violations) {
+    for (ChargingSession session : sessions) {
+      Optional<Charger> chargerOpt = context.findCharger(session.chargerId());
+      if (chargerOpt.isEmpty()) {
+        violations.add(
+            PlanViolation.ofHub(
+                RuleId.UNKNOWN_CHARGER,
+                hubId,
+                session.startTime(),
+                "Charging session "
+                    + session.sessionId()
+                    + " references unknown charger: "
+                    + session.chargerId()));
+        continue;
+      }
+
+      Charger charger = chargerOpt.get();
+      if (!charger.hubId().equals(hubId)) {
+        violations.add(
+            PlanViolation.ofHub(
+                RuleId.CHARGER_UNAVAILABLE,
+                hubId,
+                session.startTime(),
+                "Charger "
+                    + charger.id()
+                    + " belongs to hub "
+                    + charger.hubId()
+                    + ", but session was scheduled at hub "
+                    + hubId));
+      }
+
+      if (!charger.isAvailableDuring(session.startTime(), session.endTime())) {
+        violations.add(
+            PlanViolation.ofHub(
+                RuleId.CHARGER_UNAVAILABLE,
+                hubId,
+                session.startTime(),
+                "Charger "
+                    + charger.id()
+                    + " is not available during session ["
+                    + session.startTime()
+                    + ", "
+                    + session.endTime()
+                    + ") (status: "
+                    + charger.status()
+                    + ")"));
+      }
+    }
+  }
+
   private void validatePlugConflicts(
       List<ChargingSession> sessions, HubId hubId, List<PlanViolation> violations) {
     Map<ChargerId, List<ChargingSession>> byCharger = new HashMap<>();
@@ -88,7 +142,7 @@ final class ChargerCapacityValidator {
         if (first.overlaps(second)) {
           violations.add(
               PlanViolation.ofHub(
-                  RuleId.H2_CHARGER_CAPACITY,
+                  RuleId.CHARGER_DOUBLE_BOOKED,
                   hubId,
                   second.startTime(),
                   "Plug conflict on charger "
@@ -121,7 +175,6 @@ final class ChargerCapacityValidator {
       events.add(new SweepEvent(session.endTime(), -1, session));
     }
 
-    // Sort by timestamp; at identical timestamps, end events (-1) precede start events (+1)
     events.sort(Comparator.comparing(SweepEvent::time).thenComparingInt(SweepEvent::delta));
 
     int currentOccupancy = 0;

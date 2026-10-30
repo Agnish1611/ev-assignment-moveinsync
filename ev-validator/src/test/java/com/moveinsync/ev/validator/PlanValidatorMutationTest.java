@@ -9,7 +9,9 @@ import com.moveinsync.ev.domain.distance.DistanceDuration;
 import com.moveinsync.ev.domain.distance.DistanceProvider;
 import com.moveinsync.ev.domain.distance.MatrixDistanceProvider;
 import com.moveinsync.ev.domain.hub.Charger;
+import com.moveinsync.ev.domain.hub.ChargerStatus;
 import com.moveinsync.ev.domain.hub.Hub;
+import com.moveinsync.ev.domain.hub.OutageWindow;
 import com.moveinsync.ev.domain.location.Location;
 import com.moveinsync.ev.domain.schedule.ChargingSession;
 import com.moveinsync.ev.domain.schedule.FleetPlan;
@@ -741,5 +743,259 @@ class PlanValidatorMutationTest {
     ValidationReport report = validator.validate(mutatedPlan);
     assertThat(report.isValid()).isFalse();
     assertThat(report.violationsFor(RuleId.CLAIMED_SOC_MISMATCH)).isNotEmpty();
+  }
+
+  @Test
+  @DisplayName(
+      "Mutation 16: Scheduling session on a FAULTY charger produces CHARGER_UNAVAILABLE (D4)")
+  void mutationSessionOnFaultyCharger() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Instant tStart = t0.plusSeconds(2400);
+    Instant tEnd = tStart.plusSeconds(1080);
+
+    Charger faultyCharger = charger1.withStatus(ChargerStatus.FAULTY);
+    ValidationContext faultyContext =
+        ValidationContext.builder()
+            .addHub(hub1)
+            .addCharger(faultyCharger)
+            .consumptionModel(context.consumptionModel())
+            .distanceProvider(context.distanceProvider())
+            .chargingCurve(context.chargingCurve())
+            .batteryFloorPercentage(context.batteryFloorPercentage())
+            .build();
+    PlanValidator localValidator = new PlanValidator(faultyContext);
+
+    ChargingSession session =
+        new ChargingSession(
+            "SESS-FAULTY",
+            cab1.id(),
+            hub1.id(),
+            faultyCharger.id(),
+            tStart,
+            tEnd,
+            47_000L,
+            55_000L,
+            750_000L);
+    VehicleSchedule sched = new VehicleSchedule(cab1, hub1Loc, 47_000L, t0, List.of(session));
+    FleetPlan plan =
+        new FleetPlan(
+            "P-FAULTY",
+            "tenant-1",
+            t0,
+            t0.plusSeconds(7200),
+            List.of(sched),
+            List.of(),
+            1L,
+            "hash");
+
+    ValidationReport report = localValidator.validate(plan);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.CHARGER_UNAVAILABLE)).isNotEmpty();
+  }
+
+  @Test
+  @DisplayName(
+      "Mutation 17: Session overlapping charger OutageWindow by 1s produces CHARGER_UNAVAILABLE (D4)")
+  void mutationSessionOverlappingOutageWindowBy1Second() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Instant tStart = t0.plusSeconds(2400);
+    Instant tEnd = tStart.plusSeconds(1080);
+
+    // Outage starts 1s before session ends: [tEnd - 1s, tEnd + 1800s)
+    OutageWindow outage =
+        new OutageWindow(tEnd.minusSeconds(1), tEnd.plusSeconds(1800), "Maintenance");
+    Charger outageCharger = charger1.withOutages(List.of(outage));
+
+    ValidationContext outageContext =
+        ValidationContext.builder()
+            .addHub(hub1)
+            .addCharger(outageCharger)
+            .consumptionModel(context.consumptionModel())
+            .distanceProvider(context.distanceProvider())
+            .chargingCurve(context.chargingCurve())
+            .batteryFloorPercentage(context.batteryFloorPercentage())
+            .build();
+    PlanValidator localValidator = new PlanValidator(outageContext);
+
+    ChargingSession session =
+        new ChargingSession(
+            "SESS-OUTAGE-OVERLAP",
+            cab1.id(),
+            hub1.id(),
+            outageCharger.id(),
+            tStart,
+            tEnd,
+            47_000L,
+            55_000L,
+            750_000L);
+    VehicleSchedule sched = new VehicleSchedule(cab1, hub1Loc, 47_000L, t0, List.of(session));
+    FleetPlan plan =
+        new FleetPlan(
+            "P-OUTAGE",
+            "tenant-1",
+            t0,
+            t0.plusSeconds(7200),
+            List.of(sched),
+            List.of(),
+            1L,
+            "hash");
+
+    ValidationReport report = localValidator.validate(plan);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.CHARGER_UNAVAILABLE)).isNotEmpty();
+  }
+
+  @Test
+  @DisplayName(
+      "Mutation 18: Session ending exactly at OutageWindow start is valid [half-open interval) (D4)")
+  void mutationSessionEndingExactlyAtOutageStartIsValid() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Instant tStart = t0.plusSeconds(2400);
+    Instant tEnd = tStart.plusSeconds(1080);
+
+    // Outage starts exactly at tEnd: [tEnd, tEnd + 1800s)
+    OutageWindow outage = new OutageWindow(tEnd, tEnd.plusSeconds(1800), "Maintenance");
+    Charger outageCharger = charger1.withOutages(List.of(outage));
+
+    ValidationContext outageContext =
+        ValidationContext.builder()
+            .addHub(hub1)
+            .addCharger(outageCharger)
+            .consumptionModel(context.consumptionModel())
+            .distanceProvider(context.distanceProvider())
+            .chargingCurve(context.chargingCurve())
+            .batteryFloorPercentage(context.batteryFloorPercentage())
+            .build();
+    PlanValidator localValidator = new PlanValidator(outageContext);
+
+    ChargingSession session =
+        new ChargingSession(
+            "SESS-OUTAGE-EDGE",
+            cab1.id(),
+            hub1.id(),
+            outageCharger.id(),
+            tStart,
+            tEnd,
+            47_000L,
+            55_000L,
+            750_000L);
+    VehicleSchedule sched = new VehicleSchedule(cab1, hub1Loc, 47_000L, t0, List.of(session));
+    FleetPlan plan =
+        new FleetPlan(
+            "P-OUTAGE-EDGE",
+            "tenant-1",
+            t0,
+            t0.plusSeconds(7200),
+            List.of(sched),
+            List.of(),
+            1L,
+            "hash");
+
+    ValidationReport report = localValidator.validate(plan);
+    assertThat(report.violationsFor(RuleId.CHARGER_UNAVAILABLE)).isEmpty();
+  }
+
+  @Test
+  @DisplayName(
+      "Mutation 19: Double booking the same charger plug by 1s produces CHARGER_DOUBLE_BOOKED (D4)")
+  void mutationPerChargerDoubleBookingBy1Second() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Instant tStart1 = t0.plusSeconds(1000);
+    Instant tEnd1 = tStart1.plusSeconds(1080);
+
+    // Second session overlaps first session by 1 second on the same charger!
+    Instant tStart2 = tEnd1.minusSeconds(1);
+    Instant tEnd2 = tStart2.plusSeconds(1080);
+
+    ChargingSession session1 =
+        new ChargingSession(
+            "SESS-PLUG-1",
+            cab1.id(),
+            hub1.id(),
+            charger1.id(),
+            tStart1,
+            tEnd1,
+            47_000L,
+            55_000L,
+            750_000L);
+    ChargingSession session2 =
+        new ChargingSession(
+            "SESS-PLUG-2",
+            cab2.id(),
+            hub1.id(),
+            charger1.id(),
+            tStart2,
+            tEnd2,
+            47_000L,
+            55_000L,
+            750_000L);
+
+    VehicleSchedule sched1 = new VehicleSchedule(cab1, hub1Loc, 47_000L, t0, List.of(session1));
+    VehicleSchedule sched2 = new VehicleSchedule(cab2, hub1Loc, 47_000L, t0, List.of(session2));
+    FleetPlan plan =
+        new FleetPlan(
+            "P-DOUBLE-PLUG",
+            "tenant-1",
+            t0,
+            t0.plusSeconds(7200),
+            List.of(sched1, sched2),
+            List.of(),
+            1L,
+            "hash");
+
+    ValidationReport report = validator.validate(plan);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.CHARGER_DOUBLE_BOOKED)).isNotEmpty();
+  }
+
+  @Test
+  @DisplayName(
+      "Mutation 20: Charger scheduled at hub it does not belong to produces CHARGER_UNAVAILABLE (D4)")
+  void mutationChargerDoesNotBelongToHub() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Instant tStart = t0.plusSeconds(2400);
+    Instant tEnd = tStart.plusSeconds(1080);
+
+    // Charger belongs to foreign hub
+    Charger foreignCharger = Charger.of("tenant-1", "CHG-FOREIGN", "HUB-FOREIGN", 50);
+
+    ValidationContext foreignContext =
+        ValidationContext.builder()
+            .addHub(hub1)
+            .addCharger(foreignCharger)
+            .consumptionModel(context.consumptionModel())
+            .distanceProvider(context.distanceProvider())
+            .chargingCurve(context.chargingCurve())
+            .batteryFloorPercentage(context.batteryFloorPercentage())
+            .build();
+    PlanValidator localValidator = new PlanValidator(foreignContext);
+
+    // Session is at hub1, but specifies foreignCharger
+    ChargingSession session =
+        new ChargingSession(
+            "SESS-FOREIGN-CHG",
+            cab1.id(),
+            hub1.id(),
+            foreignCharger.id(),
+            tStart,
+            tEnd,
+            47_000L,
+            55_000L,
+            750_000L);
+    VehicleSchedule sched = new VehicleSchedule(cab1, hub1Loc, 47_000L, t0, List.of(session));
+    FleetPlan plan =
+        new FleetPlan(
+            "P-FOREIGN",
+            "tenant-1",
+            t0,
+            t0.plusSeconds(7200),
+            List.of(sched),
+            List.of(),
+            1L,
+            "hash");
+
+    ValidationReport report = localValidator.validate(plan);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.CHARGER_UNAVAILABLE)).isNotEmpty();
   }
 }
