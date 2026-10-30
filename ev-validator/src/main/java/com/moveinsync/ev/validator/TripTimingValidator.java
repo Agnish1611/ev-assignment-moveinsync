@@ -30,9 +30,13 @@ final class TripTimingValidator {
   }
 
   private void validateAssignmentTiming(TripAssignment assign, List<PlanViolation> violations) {
-    Trip trip = assign.trip();
+    validateExactPickup(assign, violations);
+    validateFinishDeadline(assign, violations);
+    validatePhysicalDuration(assign, violations);
+  }
 
-    // Check 1: Must start exactly on time
+  private void validateExactPickup(TripAssignment assign, List<PlanViolation> violations) {
+    Trip trip = assign.trip();
     if (!assign.pickupTime().equals(trip.startTs())) {
       violations.add(
           PlanViolation.ofTrip(
@@ -48,8 +52,10 @@ final class TripTimingValidator {
                   + trip.startTs()
                   + ")"));
     }
+  }
 
-    // Check 2: Must finish by latest finish deadline
+  private void validateFinishDeadline(TripAssignment assign, List<PlanViolation> violations) {
+    Trip trip = assign.trip();
     if (assign.dropoffTime().isAfter(trip.latestFinishTs())) {
       violations.add(
           PlanViolation.ofTrip(
@@ -65,8 +71,10 @@ final class TripTimingValidator {
                   + trip.latestFinishTs()
                   + ")"));
     }
+  }
 
-    // Check 3: Physical duration feasibility
+  private void validatePhysicalDuration(TripAssignment assign, List<PlanViolation> violations) {
+    Trip trip = assign.trip();
     Instant minPhysicallyPossibleDropoff =
         assign.pickupTime().plusSeconds(trip.estimatedDurationSeconds());
     if (assign.dropoffTime().isBefore(minPhysicallyPossibleDropoff)) {

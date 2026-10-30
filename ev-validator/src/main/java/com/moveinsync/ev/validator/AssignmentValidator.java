@@ -120,28 +120,38 @@ final class AssignmentValidator {
                     + startLoc.id()));
         return;
       }
-      int transitDuration = ddOpt.get().durationSeconds();
-      long gapSeconds =
-          Duration.between(curr.activityEndTime(), next.activityStartTime()).getSeconds();
+      checkTransitDuration(
+          endLoc, startLoc, curr, next, vehicleId, ddOpt.get().durationSeconds(), violations);
+    }
+  }
 
-      if (transitDuration > gapSeconds) {
-        violations.add(
-            PlanViolation.ofVehicle(
-                RuleId.H4_ASSIGNMENT_OVERLAP,
-                vehicleId,
-                next.activityStartTime(),
-                "Vehicle "
-                    + vehicleId
-                    + " physical transit from "
-                    + endLoc.id()
-                    + " to "
-                    + startLoc.id()
-                    + " requires "
-                    + transitDuration
-                    + "s, but available schedule gap is only "
-                    + gapSeconds
-                    + "s"));
-      }
+  private void checkTransitDuration(
+      Location endLoc,
+      Location startLoc,
+      RouteActivity curr,
+      RouteActivity next,
+      VehicleId vehicleId,
+      int transitDuration,
+      List<PlanViolation> violations) {
+    long gapSeconds =
+        Duration.between(curr.activityEndTime(), next.activityStartTime()).getSeconds();
+    if (transitDuration > gapSeconds) {
+      violations.add(
+          PlanViolation.ofVehicle(
+              RuleId.H4_ASSIGNMENT_OVERLAP,
+              vehicleId,
+              next.activityStartTime(),
+              "Vehicle "
+                  + vehicleId
+                  + " physical transit from "
+                  + endLoc.id()
+                  + " to "
+                  + startLoc.id()
+                  + " requires "
+                  + transitDuration
+                  + "s, but available schedule gap is only "
+                  + gapSeconds
+                  + "s"));
     }
   }
 

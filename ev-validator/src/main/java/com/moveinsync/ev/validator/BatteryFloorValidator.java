@@ -34,6 +34,13 @@ final class BatteryFloorValidator {
     Vehicle vehicle = schedule.vehicle();
     long floorWh = vehicle.calculateFloorSocWh(context.batteryFloorPercentage());
 
+    checkInitialSocFloor(schedule, vehicle, floorWh, violations);
+    validateActivities(schedule, vehicle, floorWh, violations);
+    return violations;
+  }
+
+  private void checkInitialSocFloor(
+      VehicleSchedule schedule, Vehicle vehicle, long floorWh, List<PlanViolation> violations) {
     if (schedule.initialSocWh() < floorWh) {
       violations.add(
           PlanViolation.ofVehicle(
@@ -48,7 +55,10 @@ final class BatteryFloorValidator {
                   + floorWh
                   + " Wh)"));
     }
+  }
 
+  private void validateActivities(
+      VehicleSchedule schedule, Vehicle vehicle, long floorWh, List<PlanViolation> violations) {
     Location currentLocation = schedule.initialLocation();
     long currentSocWh = schedule.initialSocWh();
 
@@ -68,8 +78,6 @@ final class BatteryFloorValidator {
         }
       }
     }
-
-    return violations;
   }
 
   private long validateTripAssignment(
@@ -91,6 +99,17 @@ final class BatteryFloorValidator {
             .calculateEnergyWh(vehicle, trip.distanceMeters(), trip.startTs(), context.acOn());
     long dropoffSocWh = arrivalSocWh - tripEnergy;
 
+    checkDropoffSocFloorAndClaims(assign, vehicle, trip, dropoffSocWh, floorWh, violations);
+    return dropoffSocWh;
+  }
+
+  private void checkDropoffSocFloorAndClaims(
+      TripAssignment assign,
+      Vehicle vehicle,
+      Trip trip,
+      long dropoffSocWh,
+      long floorWh,
+      List<PlanViolation> violations) {
     if (dropoffSocWh < floorWh) {
       violations.add(
           PlanViolation.ofTrip(
@@ -122,8 +141,6 @@ final class BatteryFloorValidator {
                   + " Wh) for trip "
                   + trip.id()));
     }
-
-    return dropoffSocWh;
   }
 
   private long validateDeadheadToPickup(
@@ -134,6 +151,23 @@ final class BatteryFloorValidator {
       long currentSocWh,
       List<PlanViolation> violations) {
     Trip trip = assign.trip();
+    checkDeadheadRoute(currentLocation, trip, vehicle, assign.pickupTime(), violations);
+
+    long deadheadEnergy =
+        calculateDeadheadEnergy(currentLocation, trip.fromLocation(), vehicle, assign.pickupTime());
+    long arrivalSocWh = currentSocWh - deadheadEnergy;
+
+    checkDeadheadClaimsAndFloor(
+        assign, vehicle, trip, deadheadEnergy, arrivalSocWh, floorWh, violations);
+    return arrivalSocWh;
+  }
+
+  private void checkDeadheadRoute(
+      Location currentLocation,
+      Trip trip,
+      Vehicle vehicle,
+      Instant pickupTime,
+      List<PlanViolation> violations) {
     if (!currentLocation.id().equals(trip.fromLocation().id())
         && context
             .distanceProvider()
@@ -144,17 +178,22 @@ final class BatteryFloorValidator {
               RuleId.ROUTE_UNAVAILABLE,
               trip.id(),
               vehicle.id(),
-              assign.pickupTime(),
+              pickupTime,
               "No route available from "
                   + currentLocation.id()
                   + " to "
                   + trip.fromLocation().id()));
     }
+  }
 
-    long deadheadEnergy =
-        calculateDeadheadEnergy(currentLocation, trip.fromLocation(), vehicle, assign.pickupTime());
-    long arrivalSocWh = currentSocWh - deadheadEnergy;
-
+  private void checkDeadheadClaimsAndFloor(
+      TripAssignment assign,
+      Vehicle vehicle,
+      Trip trip,
+      long deadheadEnergy,
+      long arrivalSocWh,
+      long floorWh,
+      List<PlanViolation> violations) {
     if (assign.deadheadEnergyWh() != deadheadEnergy) {
       violations.add(
           PlanViolation.ofTrip(
@@ -199,8 +238,6 @@ final class BatteryFloorValidator {
                   + " Wh) upon deadhead arrival at pickup for trip "
                   + trip.id()));
     }
-
-    return arrivalSocWh;
   }
 
   private long validateChargingSession(
@@ -225,6 +262,17 @@ final class BatteryFloorValidator {
         validateDeadheadToHub(
             session, vehicle, floorWh, currentLocation, currentSocWh, hubOpt.get(), violations);
 
+    checkSessionStartSoc(session, vehicle, arrivalAtHubSoc, floorWh, violations);
+    checkSessionSocBounds(session, vehicle, violations);
+    return validateSessionDelivery(session, vehicle, arrivalAtHubSoc, violations);
+  }
+
+  private void checkSessionStartSoc(
+      ChargingSession session,
+      Vehicle vehicle,
+      long arrivalAtHubSoc,
+      long floorWh,
+      List<PlanViolation> violations) {
     if (session.startSocWh() != arrivalAtHubSoc) {
       violations.add(
           PlanViolation.ofVehicle(
@@ -254,7 +302,10 @@ final class BatteryFloorValidator {
                   + floorWh
                   + " Wh)"));
     }
+  }
 
+  private void checkSessionSocBounds(
+      ChargingSession session, Vehicle vehicle, List<PlanViolation> violations) {
     if (session.startSocWh() < 0 || session.startSocWh() > vehicle.batteryCapacityWh()) {
       violations.add(
           PlanViolation.ofVehicle(
@@ -284,7 +335,13 @@ final class BatteryFloorValidator {
                   + vehicle.batteryCapacityWh()
                   + " Wh)"));
     }
+  }
 
+  private long validateSessionDelivery(
+      ChargingSession session,
+      Vehicle vehicle,
+      long arrivalAtHubSoc,
+      List<PlanViolation> violations) {
     Optional<Charger> chargerOpt = context.findCharger(session.chargerId());
     int chargerPowerKw = chargerOpt.map(Charger::powerKw).orElse(vehicle.maxChargeKw());
     int effectivePowerKw = Math.min(chargerPowerKw, vehicle.maxChargeKw());
@@ -346,7 +403,17 @@ final class BatteryFloorValidator {
       return currentSocWh;
     }
 
-    int dist = ddOpt.get().distanceMeters();
+    return checkDeadheadToHubFloor(
+        session, vehicle, floorWh, currentSocWh, ddOpt.get().distanceMeters(), violations);
+  }
+
+  private long checkDeadheadToHubFloor(
+      ChargingSession session,
+      Vehicle vehicle,
+      long floorWh,
+      long currentSocWh,
+      int dist,
+      List<PlanViolation> violations) {
     long deadheadEnergy =
         context
             .consumptionModel()
