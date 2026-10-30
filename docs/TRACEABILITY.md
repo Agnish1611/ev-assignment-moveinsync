@@ -12,7 +12,7 @@ Traceability between case study requirements and verification evidence.
 | Per-cab timeline with SoC at each step | Timeline endpoint + tests | Phase 7, 11 |
 | Heuristic + complexity + lower bound | Javadoc Big-O + lower-bound report in `docs/reports/` | Phase 5, 6, 7 |
 | Independent validator run on every result | ArchUnit isolation test + validator invoked in publish path | Phase 0 & 2 complete & verified: `ValidatorArchitectureTest` (zero planner/framework imports), `ValidationInput` trust model, totality guard, zero warnings |
-| 300-cab case in < 30 s with report | Benchmark test + committed report | Phase 13 |
+| 300-cab case in < 30 s with report | Benchmark test + committed report | Planner solve: `BenchmarkScenarioTest` and `docs/reports/PLANNER_300CAB_REPORT.md`. Validator latency: `docs/reports/VALIDATION_300CAB_REPORT.md` |
 | Concurrency + failure tests | Named tests listed in README | Phase 9, 10, 13 |
 | Throughput and p50/p99 | k6/JMH output in README with machine specs | Phase 13 |
 | One-command run | CI job doing `docker compose up` smoke test | Phase 0, 14 |
