@@ -65,6 +65,36 @@ if grep -rn --include="*.java" --exclude-dir="target" -E "\b(double|float)\b" ev
     exit 1
 fi
 
+# 3f. @Disabled and @Ignore in tests
+if grep -rn --include="*.java" --exclude-dir="target" -E "@(org\.junit(\.jupiter\.api)?\.)?(Disabled|Ignore)\b" ev-domain ev-planner-core ev-validator ev-service ev-sim ev-bench; then
+    echo "ERROR: @Disabled or @Ignore detected in tests! Weakening tests is forbidden."
+    exit 1
+fi
+
+# 3g. Empty catch blocks
+if grep -rn --include="*.java" --exclude-dir="target" -E "catch[[:space:]]*\([^)]+\)[[:space:]]*\{[[:space:]]*\}" ev-domain ev-planner-core ev-validator ev-service ev-sim ev-bench; then
+    echo "ERROR: Empty catch block detected! Catch-and-ignore is forbidden."
+    exit 1
+fi
+
+# 3h. Non-deterministic time (Instant.now / LocalDateTime) in domain/validator
+if grep -rn --include="*.java" --exclude-dir="target" -E "\b(Instant\.now|LocalDateTime)\b" ev-domain/src/main ev-validator/src/main; then
+    echo "ERROR: Instant.now() or LocalDateTime detected in ev-domain or ev-validator! Use explicit UTC Instants."
+    exit 1
+fi
+
+# 3i. TODO / FIXME / HACK
+if grep -rn --include="*.java" --exclude-dir="target" -E "\b(TODO|FIXME|HACK)\b" ev-domain ev-planner-core ev-validator ev-service ev-sim ev-bench; then
+    echo "ERROR: TODO/FIXME/HACK detected in codebase without resolution!"
+    exit 1
+fi
+
+# 3j. Hard-coded credentials
+if grep -rn --include="*.java" --exclude-dir="target" -iE '(password|secret|apikey)[[:space:]]*=[[:space:]]*"[^"]+"' ev-domain/src/main ev-planner-core/src/main ev-validator/src/main; then
+    echo "ERROR: Hard-coded credentials detected in production code!"
+    exit 1
+fi
+
 echo "✓ Forbidden constructs check passed."
 
 # 4. Log and PII hygiene check

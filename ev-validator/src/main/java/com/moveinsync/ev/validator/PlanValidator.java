@@ -54,6 +54,11 @@ public final class PlanValidator {
     this.curveValidator = new ChargingCurveValidator(context);
   }
 
+  /** Returns the active validation context. */
+  public ValidationContext context() {
+    return context;
+  }
+
   /**
    * Performs an exhaustive independent validation check of the candidate fleet plan.
    *
