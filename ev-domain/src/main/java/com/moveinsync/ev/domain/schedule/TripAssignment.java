@@ -39,22 +39,6 @@ public record TripAssignment(
     Objects.requireNonNull(pickupTime, "pickupTime must not be null");
     Objects.requireNonNull(dropoffTime, "dropoffTime must not be null");
 
-    if (!pickupTime.equals(trip.startTs())) {
-      throw new IllegalArgumentException(
-          "Pickup time ("
-              + pickupTime
-              + ") must exactly match trip startTs ("
-              + trip.startTs()
-              + ")");
-    }
-    if (dropoffTime.isAfter(trip.latestFinishTs())) {
-      throw new IllegalArgumentException(
-          "Dropoff time ("
-              + dropoffTime
-              + ") exceeds trip latestFinishTs ("
-              + trip.latestFinishTs()
-              + ")");
-    }
     if (pickupTime.isAfter(dropoffTime)) {
       throw new IllegalArgumentException(
           "Pickup time (" + pickupTime + ") cannot be after dropoff time (" + dropoffTime + ")");

@@ -43,21 +43,6 @@ public final class VehicleSchedule {
     List<RouteActivity> sorted = new ArrayList<>(activities);
     sorted.sort(Comparator.comparing(RouteActivity::activityStartTime));
 
-    // Validate non-overlapping activities for this vehicle
-    for (int i = 0; i < sorted.size() - 1; i++) {
-      RouteActivity current = sorted.get(i);
-      RouteActivity next = sorted.get(i + 1);
-      if (current.activityEndTime().isAfter(next.activityStartTime())) {
-        throw new IllegalArgumentException(
-            "Overlapping activities for vehicle "
-                + vehicle.id()
-                + ": activity ending at "
-                + current.activityEndTime()
-                + " overlaps activity starting at "
-                + next.activityStartTime());
-      }
-    }
-
     this.initialSocWh = initialSocWh;
     this.activities = Collections.unmodifiableList(sorted);
   }

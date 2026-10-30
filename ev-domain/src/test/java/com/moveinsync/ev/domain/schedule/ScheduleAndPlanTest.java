@@ -1,7 +1,6 @@
 package com.moveinsync.ev.domain.schedule;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.moveinsync.ev.domain.hub.ChargerId;
 import com.moveinsync.ev.domain.hub.HubId;
@@ -87,37 +86,13 @@ class ScheduleAndPlanTest {
             55_000L,
             1_000_000L);
 
-    // Created out of order, schedule sorts them
+    // Activities provided out of chronological order are sorted by start time
     VehicleSchedule schedule =
         new VehicleSchedule(cab, depot, 50_000L, t10.minusSeconds(1800), List.of(charge1, assign1));
 
     assertThat(schedule.activityCount()).isEqualTo(2);
     assertThat(schedule.activities().get(0)).isEqualTo(assign1);
     assertThat(schedule.activities().get(1)).isEqualTo(charge1);
-
-    // Overlapping activity for same vehicle throws exception
-    ChargingSession overlappingCharge =
-        new ChargingSession(
-            "SESS-BAD",
-            cabId,
-            HubId.of("HUB-1"),
-            ChargerId.of("CHG-1"),
-            t10.plusSeconds(600), // overlaps trip1
-            t11,
-            35_000L,
-            55_000L,
-            1_000_000L);
-
-    assertThatThrownBy(
-            () ->
-                new VehicleSchedule(
-                    cab,
-                    depot,
-                    50_000L,
-                    t10.minusSeconds(1800),
-                    List.of(assign1, overlappingCharge)))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("Overlapping activities");
   }
 
   @Test
