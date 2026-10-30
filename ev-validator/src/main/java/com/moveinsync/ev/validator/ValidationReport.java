@@ -10,13 +10,17 @@ import java.util.Objects;
  *
  * <p>A plan is valid if and only if {@link #isValid()} returns true (i.e. zero violations).
  *
- * @param violations list of all invariant violations detected during validation
+ * @param violations list of invariant violations included in the report (may be capped)
+ * @param totalViolationsCount true uncapped total count of all violations detected
+ * @param isTruncated true if the violations list was capped by a reporting threshold
  * @param totalVehiclesChecked count of fleet vehicles evaluated
  * @param totalTripsChecked count of assigned trips evaluated
  * @param totalSessionsChecked count of charging sessions evaluated
  */
 public record ValidationReport(
     List<PlanViolation> violations,
+    int totalViolationsCount,
+    boolean isTruncated,
     int totalVehiclesChecked,
     int totalTripsChecked,
     int totalSessionsChecked) {
@@ -26,10 +30,45 @@ public record ValidationReport(
     violations = Collections.unmodifiableList(new ArrayList<>(violations));
   }
 
+  public ValidationReport(
+      List<PlanViolation> violations,
+      int totalVehiclesChecked,
+      int totalTripsChecked,
+      int totalSessionsChecked) {
+    this(
+        violations,
+        violations.size(),
+        false,
+        totalVehiclesChecked,
+        totalTripsChecked,
+        totalSessionsChecked);
+  }
+
   public static ValidationReport success(
       int totalVehiclesChecked, int totalTripsChecked, int totalSessionsChecked) {
     return new ValidationReport(
-        List.of(), totalVehiclesChecked, totalTripsChecked, totalSessionsChecked);
+        List.of(), 0, false, totalVehiclesChecked, totalTripsChecked, totalSessionsChecked);
+  }
+
+  public static ValidationReport createCapped(
+      List<PlanViolation> allViolations,
+      int maxReportCap,
+      int totalVehiclesChecked,
+      int totalTripsChecked,
+      int totalSessionsChecked) {
+    int total = allViolations.size();
+    if (maxReportCap <= 0 || total <= maxReportCap) {
+      return new ValidationReport(
+          allViolations,
+          total,
+          false,
+          totalVehiclesChecked,
+          totalTripsChecked,
+          totalSessionsChecked);
+    }
+    List<PlanViolation> capped = allViolations.subList(0, maxReportCap);
+    return new ValidationReport(
+        capped, total, true, totalVehiclesChecked, totalTripsChecked, totalSessionsChecked);
   }
 
   /**
@@ -42,7 +81,7 @@ public record ValidationReport(
   }
 
   /**
-   * Returns the total count of violations detected.
+   * Returns the count of violations contained in this report.
    *
    * @return violation count
    */
@@ -84,7 +123,11 @@ public record ValidationReport(
     if (isValid()) {
       sb.append("PASSED (All invariants H1-H6 satisfied)\n");
     } else {
-      sb.append("FAILED with ").append(violationCount()).append(" violation(s)\n");
+      sb.append("FAILED with ").append(totalViolationsCount).append(" violation(s)");
+      if (isTruncated) {
+        sb.append(" [Report truncated to ").append(violations.size()).append("]");
+      }
+      sb.append("\n");
     }
     sb.append("  Vehicles evaluated: ").append(totalVehiclesChecked).append("\n");
     sb.append("  Assigned trips evaluated: ").append(totalTripsChecked).append("\n");

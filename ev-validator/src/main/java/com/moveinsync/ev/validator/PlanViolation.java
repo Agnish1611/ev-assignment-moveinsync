@@ -15,6 +15,7 @@ import java.util.Optional;
  * @param tripId trip involved in the violation, if applicable
  * @param hubId hub involved in the violation, if applicable
  * @param violationTime time instant at which the violation occurred or was projected, if applicable
+ * @param rootCauseKey deterministic deduplication / grouping key for causal analysis
  * @param message detailed diagnostic explanation (strictly non-PII)
  */
 public record PlanViolation(
@@ -23,6 +24,7 @@ public record PlanViolation(
     Optional<TripId> tripId,
     Optional<HubId> hubId,
     Optional<Instant> violationTime,
+    Optional<String> rootCauseKey,
     String message) {
 
   public PlanViolation {
@@ -31,7 +33,47 @@ public record PlanViolation(
     Objects.requireNonNull(tripId, "tripId must not be null");
     Objects.requireNonNull(hubId, "hubId must not be null");
     Objects.requireNonNull(violationTime, "violationTime must not be null");
+    Objects.requireNonNull(rootCauseKey, "rootCauseKey must not be null");
     Objects.requireNonNull(message, "message must not be null");
+  }
+
+  public PlanViolation(
+      RuleId ruleId,
+      Optional<VehicleId> vehicleId,
+      Optional<TripId> tripId,
+      Optional<HubId> hubId,
+      Optional<Instant> violationTime,
+      String message) {
+    this(
+        ruleId,
+        vehicleId,
+        tripId,
+        hubId,
+        violationTime,
+        Optional.of(deriveDefaultRootCauseKey(ruleId, vehicleId, tripId, hubId)),
+        message);
+  }
+
+  private static String deriveDefaultRootCauseKey(
+      RuleId ruleId,
+      Optional<VehicleId> vehicleId,
+      Optional<TripId> tripId,
+      Optional<HubId> hubId) {
+    return ruleId.name()
+        + ":"
+        + vehicleId
+            .map(VehicleId::value)
+            .orElseGet(
+                () ->
+                    tripId
+                        .map(TripId::value)
+                        .orElseGet(() -> hubId.map(HubId::value).orElse("general")));
+  }
+
+  public PlanViolation withRootCauseKey(String key) {
+    Objects.requireNonNull(key, "rootCauseKey must not be null");
+    return new PlanViolation(
+        ruleId, vehicleId, tripId, hubId, violationTime, Optional.of(key), message);
   }
 
   public static PlanViolation ofVehicle(

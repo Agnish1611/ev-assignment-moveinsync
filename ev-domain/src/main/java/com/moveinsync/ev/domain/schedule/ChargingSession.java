@@ -39,11 +39,6 @@ public record ChargingSession(
     Objects.requireNonNull(chargerId, "chargerId must not be null");
     Objects.requireNonNull(startTime, "startTime must not be null");
     Objects.requireNonNull(endTime, "endTime must not be null");
-
-    if (!startTime.isBefore(endTime)) {
-      throw new IllegalArgumentException(
-          "startTime (" + startTime + ") must be before endTime (" + endTime + ")");
-    }
   }
 
   @Override

@@ -39,6 +39,22 @@ final class ChargingCurveValidator {
 
   private void validateSessionDuration(
       ChargingSession session, Vehicle vehicle, List<PlanViolation> violations) {
+    if (!session.startTime().isBefore(session.endTime())) {
+      violations.add(
+          PlanViolation.ofVehicle(
+              RuleId.H6_CHARGING_CURVE,
+              vehicle.id(),
+              session.startTime(),
+              "Charging session "
+                  + session.sessionId()
+                  + " startTime ("
+                  + session.startTime()
+                  + ") must be strictly before endTime ("
+                  + session.endTime()
+                  + ")"));
+      return;
+    }
+
     Optional<Charger> chargerOpt = context.findCharger(session.chargerId());
     int chargerPowerKw = chargerOpt.map(Charger::powerKw).orElse(vehicle.maxChargeKw());
     int effectivePowerKw = Math.min(chargerPowerKw, vehicle.maxChargeKw());

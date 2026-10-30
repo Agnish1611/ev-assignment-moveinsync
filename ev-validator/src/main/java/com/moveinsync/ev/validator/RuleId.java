@@ -78,6 +78,9 @@ public enum RuleId {
   /** Routing distance/duration unavailable for an assigned geographic corridor. */
   ROUTE_UNAVAILABLE,
 
+  /** An assigned trip or charging session is scheduled outside the plan horizon (Decision D10). */
+  ACTIVITY_OUTSIDE_HORIZON,
+
   /** Unexpected exception trapped by the validator top-level totality guard (fail-closed). */
   VALIDATOR_INTERNAL_ERROR
 }
