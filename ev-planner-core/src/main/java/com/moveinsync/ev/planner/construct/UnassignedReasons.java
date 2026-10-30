@@ -30,16 +30,21 @@ final class UnassignedReasons {
       SolverConfig config,
       List<CabCursor> cursors,
       List<Trip> remaining,
-      List<UnassignedTrip> unassigned) {
+      List<UnassignedTrip> unassigned,
+      PlugCalendar plugs) {
     List<Trip> blocked = new ArrayList<>(remaining);
     remaining.clear();
     for (Trip trip : blocked) {
-      unassigned.add(explain(input, config, cursors, trip));
+      unassigned.add(explain(input, config, cursors, trip, plugs));
     }
   }
 
   static UnassignedTrip explain(
-      PlannerInput input, SolverConfig config, List<CabCursor> cursors, Trip trip) {
+      PlannerInput input,
+      SolverConfig config,
+      List<CabCursor> cursors,
+      Trip trip,
+      PlugCalendar plugs) {
     int floorPercent = config.planningFloorPercent();
     if (intrinsic(input, trip, floorPercent)) {
       return UnassignedTrip.of(
@@ -51,8 +56,9 @@ final class UnassignedReasons {
     int energy = 0;
     int reserve = 0;
     int time = 0;
+    int congested = 0;
     for (CabCursor cursor : cursors) {
-      AppendProbe.Block block = cursor.offer(input, trip, floorPercent).block();
+      AppendProbe.Block block = cursor.offerCharged(input, trip, floorPercent, plugs).block();
       if (block == AppendProbe.Block.ROUTE) {
         route++;
       } else if (block == AppendProbe.Block.ENERGY) {
@@ -61,7 +67,15 @@ final class UnassignedReasons {
         reserve++;
       } else if (block == AppendProbe.Block.TIME) {
         time++;
+      } else if (block == AppendProbe.Block.CONGESTED) {
+        congested++;
       }
+    }
+    if (congested > 0) {
+      return UnassignedTrip.of(
+          trip,
+          UnassignedReasonCode.CHARGER_CONGESTION,
+          "a cab could take this trip if one more plug were free");
     }
     UnassignedReasonCode code = code(route, energy, reserve, time);
     return UnassignedTrip.of(trip, code, explanation(code));

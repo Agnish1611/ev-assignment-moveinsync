@@ -1,6 +1,5 @@
 package com.moveinsync.ev.planner.construct;
 
-import com.moveinsync.ev.domain.schedule.TripAssignment;
 import com.moveinsync.ev.domain.schedule.UnassignedReasonCode;
 import com.moveinsync.ev.domain.schedule.UnassignedTrip;
 import com.moveinsync.ev.domain.trip.Trip;
@@ -15,11 +14,10 @@ import java.util.Optional;
 /**
  * Inserts trips by regret-k, or in start-time order when {@code regretDepth} is 0.
  *
- * <p>Time O(R^2 · C · H) for regret and O(R · C · H) for start-time order, where R is the number of
- * trips still open, C is the number of cabs, and H is the number of hubs. Space O(R + C). The
- * deadline is polled before each insertion. A trip that does not fit stays in the pool until no
- * remaining trip fits, so a later trip can use a cab that an earlier insertion just freed in
- * location or charge.
+ * <p>Time O(R^2 · C · H · P) for regret and O(R · C · H · P) for start-time order, where R is the
+ * number of trips still open, C is the number of cabs, H is the number of hubs, and P is the number
+ * of plugs considered when a direct append needs a charge stop. Space O(R + C). The deadline is
+ * polled before each insertion.
  */
 final class RegretInserter {
 
@@ -30,6 +28,7 @@ final class RegretInserter {
       List<CabCursor> cursors,
       List<Trip> remaining,
       List<UnassignedTrip> unassigned,
+      PlugCalendar plugs,
       int regretDepth) {
     boolean exhausted = false;
     while (!remaining.isEmpty()) {
@@ -42,7 +41,7 @@ final class RegretInserter {
         exhausted = true;
         break;
       }
-      if (!step(input, config, cursors, remaining, unassigned, regretDepth)) {
+      if (!step(input, config, cursors, remaining, unassigned, plugs, regretDepth)) {
         break;
       }
     }
@@ -55,19 +54,20 @@ final class RegretInserter {
       List<CabCursor> cursors,
       List<Trip> remaining,
       List<UnassignedTrip> unassigned,
+      PlugCalendar plugs,
       int regretDepth) {
-    Optional<Selection> chosen = choose(input, config, cursors, remaining, regretDepth);
+    Optional<Selection> chosen = choose(input, config, cursors, remaining, plugs, regretDepth);
     if (chosen.isEmpty()) {
       if (regretDepth <= 0) {
         Trip skipped = remaining.remove(0);
-        unassigned.add(UnassignedReasons.explain(input, config, cursors, skipped));
+        unassigned.add(UnassignedReasons.explain(input, config, cursors, skipped, plugs));
         return true;
       }
-      UnassignedReasons.parkBlocked(input, config, cursors, remaining, unassigned);
+      UnassignedReasons.parkBlocked(input, config, cursors, remaining, unassigned, plugs);
       return false;
     }
     Selection selection = chosen.orElseThrow();
-    selection.cursor().commit(selection.assignment());
+    selection.cursor().commit(input, selection.probe(), plugs);
     if (!remaining.remove(selection.trip())) {
       throw new IllegalStateException("selected trip was not waiting to be inserted");
     }
@@ -79,13 +79,14 @@ final class RegretInserter {
       SolverConfig config,
       List<CabCursor> cursors,
       List<Trip> remaining,
+      PlugCalendar plugs,
       int regretDepth) {
     if (regretDepth <= 0) {
-      return score(input, config, cursors, remaining.get(0), 1);
+      return score(input, config, cursors, remaining.get(0), plugs, 1);
     }
     Optional<Selection> best = Optional.empty();
     for (Trip trip : remaining) {
-      Optional<Selection> candidate = score(input, config, cursors, trip, regretDepth);
+      Optional<Selection> candidate = score(input, config, cursors, trip, plugs, regretDepth);
       if (candidate.isPresent()
           && (best.isEmpty() || better(candidate.orElseThrow(), best.orElseThrow()))) {
         best = candidate;
@@ -99,33 +100,34 @@ final class RegretInserter {
       SolverConfig config,
       List<CabCursor> cursors,
       Trip trip,
+      PlugCalendar plugs,
       int regretDepth) {
     List<Offer> offers = new ArrayList<>();
     for (CabCursor cursor : cursors) {
-      AppendProbe probe = cursor.offer(input, trip, config.planningFloorPercent());
+      AppendProbe probe = cursor.offerCharged(input, trip, config.planningFloorPercent(), plugs);
       if (probe.feasible()) {
-        offers.add(new Offer(cursor, probe.assignment().orElseThrow(), probe.energyWh()));
+        offers.add(new Offer(cursor, probe));
       }
     }
     if (offers.isEmpty()) {
       return Optional.empty();
     }
     offers.sort(
-        Comparator.comparingLong(Offer::energyWh)
+        Comparator.comparingLong((Offer offer) -> offer.probe().energyWh())
             .thenComparing(offer -> offer.cursor().vehicleId()));
     Offer best = offers.get(0);
-    return Optional.of(
-        new Selection(trip, best.cursor(), best.assignment(), rank(offers, regretDepth)));
+    return Optional.of(new Selection(trip, best.cursor(), best.probe(), rank(offers, regretDepth)));
   }
 
   private static long rank(List<Offer> offers, int regretDepth) {
     if (regretDepth <= 1) {
-      return -offers.get(0).energyWh();
+      return -offers.get(0).probe().energyWh();
     }
     if (offers.size() < regretDepth) {
       return Long.MAX_VALUE / 4L - offers.size();
     }
-    return Math.subtractExact(offers.get(regretDepth - 1).energyWh(), offers.get(0).energyWh());
+    return Math.subtractExact(
+        offers.get(regretDepth - 1).probe().energyWh(), offers.get(0).probe().energyWh());
   }
 
   private static boolean better(Selection candidate, Selection incumbent) {
@@ -140,7 +142,7 @@ final class RegretInserter {
     return candidate.trip().id().value().compareTo(incumbent.trip().id().value()) < 0;
   }
 
-  private record Offer(CabCursor cursor, TripAssignment assignment, long energyWh) {}
+  private record Offer(CabCursor cursor, AppendProbe probe) {}
 
-  private record Selection(Trip trip, CabCursor cursor, TripAssignment assignment, long score) {}
+  private record Selection(Trip trip, CabCursor cursor, AppendProbe probe, long score) {}
 }

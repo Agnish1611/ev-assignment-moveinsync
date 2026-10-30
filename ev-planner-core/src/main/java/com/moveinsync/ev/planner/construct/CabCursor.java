@@ -1,7 +1,7 @@
 package com.moveinsync.ev.planner.construct;
 
-import com.moveinsync.ev.domain.distance.DistanceDuration;
 import com.moveinsync.ev.domain.location.Location;
+import com.moveinsync.ev.domain.schedule.RouteActivity;
 import com.moveinsync.ev.domain.schedule.TripAssignment;
 import com.moveinsync.ev.domain.schedule.VehicleSchedule;
 import com.moveinsync.ev.domain.trip.Trip;
@@ -11,21 +11,17 @@ import com.moveinsync.ev.planner.input.PlannerInput;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
- * One cab's route while trips are still being inserted. Appending is the only edit: trips are
- * considered in an order that does not require splicing the middle of a route.
+ * One cab's route while trips are still being inserted. Appending is the only edit.
  *
- * <p>Deadhead duration on each assignment is 0 seconds (D19). Distance and energy are the real
- * deadhead. The validator starts the activity at pickup minus the claimed duration and also
- * requires the gap before that start to cover the drive, so a non-zero duration would count the
- * drive twice and can start the activity before the horizon.
+ * <p>Deadhead duration on each assignment is 0 seconds (D19). A charge stop, when one is required,
+ * is appended before the trip and moves the cab to the hub.
  */
 final class CabCursor {
 
   private final CabShift shift;
-  private final List<TripAssignment> assignments = new ArrayList<>();
+  private final List<RouteActivity> activities = new ArrayList<>();
   private Location location;
   private long socWh;
   private Instant freeAt;
@@ -49,24 +45,53 @@ final class CabCursor {
     return shift.vehicle().id().value();
   }
 
-  AppendProbe offer(PlannerInput input, Trip trip, int floorPercent) {
-    Optional<DistanceDuration> leg = RoutePhysics.travel(input, location, trip.fromLocation());
-    if (leg.isEmpty()) {
-      return AppendProbe.blocked(AppendProbe.Block.ROUTE);
-    }
-    DistanceDuration travel = leg.orElseThrow();
-    Instant departBy = trip.startTs().minusSeconds(travel.durationSeconds());
-    if (freeAt.isAfter(departBy)) {
-      return AppendProbe.blocked(AppendProbe.Block.TIME);
-    }
-    return place(input, trip, floorPercent, travel);
+  Vehicle vehicle() {
+    return shift.vehicle();
   }
 
-  void commit(TripAssignment assignment) {
-    assignments.add(assignment);
-    location = assignment.trip().toLocation();
-    socWh = assignment.departureAfterDropoffSocWh();
-    freeAt = assignment.dropoffTime();
+  Location location() {
+    return location;
+  }
+
+  long socWh() {
+    return socWh;
+  }
+
+  Instant freeAt() {
+    return freeAt;
+  }
+
+  AppendProbe offer(PlannerInput input, Trip trip, int floorPercent) {
+    return TripPlacement.offer(vehicle(), location, socWh, freeAt, input, trip, floorPercent);
+  }
+
+  AppendProbe offerCharged(PlannerInput input, Trip trip, int floorPercent, PlugCalendar plugs) {
+    AppendProbe direct = offer(input, trip, floorPercent);
+    if (direct.feasible()
+        || direct.block() == AppendProbe.Block.ROUTE
+        || direct.block() == AppendProbe.Block.TIME) {
+      return direct;
+    }
+    return ChargeStop.recover(this, input, trip, floorPercent, plugs, direct);
+  }
+
+  void commit(PlannerInput input, AppendProbe probe, PlugCalendar plugs) {
+    if (probe.charge().isPresent()) {
+      SessionReplay.adopt(this, input, probe.charge().orElseThrow(), plugs);
+    }
+    TripAssignment assignment = probe.assignment().orElseThrow();
+    push(
+        assignment,
+        assignment.trip().toLocation(),
+        assignment.departureAfterDropoffSocWh(),
+        assignment.dropoffTime());
+  }
+
+  void push(RouteActivity activity, Location nextLocation, long nextSocWh, Instant nextFree) {
+    activities.add(activity);
+    location = nextLocation;
+    socWh = nextSocWh;
+    freeAt = nextFree;
   }
 
   VehicleSchedule toSchedule() {
@@ -75,39 +100,6 @@ final class CabCursor {
         shift.startLocation(),
         shift.initialSocWh(),
         shift.availableFrom(),
-        List.copyOf(assignments));
-  }
-
-  private AppendProbe place(
-      PlannerInput input, Trip trip, int floorPercent, DistanceDuration travel) {
-    Vehicle vehicle = shift.vehicle();
-    long floorWh = vehicle.calculateFloorSocWh(floorPercent);
-    long deadheadWh = RoutePhysics.energy(input, vehicle, travel.distanceMeters(), trip.startTs());
-    if (deadheadWh > socWh || socWh - deadheadWh < floorWh) {
-      return AppendProbe.blocked(AppendProbe.Block.ENERGY);
-    }
-    long arrivalWh = socWh - deadheadWh;
-    long loadedWh = RoutePhysics.energy(input, vehicle, trip.distanceMeters(), trip.startTs());
-    if (loadedWh > arrivalWh || arrivalWh - loadedWh < floorWh) {
-      return AppendProbe.blocked(AppendProbe.Block.ENERGY);
-    }
-    long dropoffWh = arrivalWh - loadedWh;
-    if (!RoutePhysics.canReserve(
-        input, vehicle, trip.toLocation(), dropoffWh, trip.plannedDropoffTs(), floorWh)) {
-      return AppendProbe.blocked(AppendProbe.Block.RESERVE);
-    }
-    int claimedDeadheadSeconds = 0;
-    TripAssignment assignment =
-        new TripAssignment(
-            trip,
-            vehicle.id(),
-            trip.startTs(),
-            trip.plannedDropoffTs(),
-            travel.distanceMeters(),
-            claimedDeadheadSeconds,
-            deadheadWh,
-            arrivalWh,
-            dropoffWh);
-    return AppendProbe.placed(assignment, Math.addExact(deadheadWh, loadedWh));
+        List.copyOf(activities));
   }
 }

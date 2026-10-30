@@ -67,4 +67,18 @@ public record SolverConfig(
         DEFAULT_CHANGE_PENALTY_MICROS,
         BASELINE_MAX_ITERATIONS);
   }
+
+  /** Same floor, lock, and penalty as the baseline, with a positive search cap. */
+  public SolverConfig withIterations(int maxIterations) {
+    if (maxIterations <= 0) {
+      throw new IllegalArgumentException("maxIterations must be positive: " + maxIterations);
+    }
+    return new SolverConfig(
+        deadline,
+        seed,
+        planningFloorPercent,
+        lockWindowSeconds,
+        changePenaltyMicros,
+        maxIterations);
+  }
 }

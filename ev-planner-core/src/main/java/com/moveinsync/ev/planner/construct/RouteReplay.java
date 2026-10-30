@@ -1,5 +1,6 @@
 package com.moveinsync.ev.planner.construct;
 
+import com.moveinsync.ev.domain.schedule.ChargingSession;
 import com.moveinsync.ev.domain.schedule.FleetPlan;
 import com.moveinsync.ev.domain.schedule.RouteActivity;
 import com.moveinsync.ev.domain.schedule.TripAssignment;
@@ -27,9 +28,10 @@ final class RouteReplay {
     RELAX
   }
 
-  static List<CabCursor> load(PlannerInput input, FleetPlan plan, int floorPercent) {
+  static List<CabCursor> load(
+      PlannerInput input, FleetPlan plan, int floorPercent, PlugCalendar plugs) {
     requireSameTenant(input, plan);
-    return replay(input, plan, floorPercent, Set.of(), Mode.STRICT, trip -> false).cursors();
+    return replay(input, plan, floorPercent, Set.of(), Mode.STRICT, trip -> false, plugs).cursors();
   }
 
   static Outcome relax(
@@ -37,9 +39,10 @@ final class RouteReplay {
       FleetPlan plan,
       int floorPercent,
       Set<String> drop,
-      Predicate<Trip> frozen) {
+      Predicate<Trip> frozen,
+      PlugCalendar plugs) {
     requireSameTenant(input, plan);
-    return replay(input, plan, floorPercent, drop, Mode.RELAX, frozen);
+    return replay(input, plan, floorPercent, drop, Mode.RELAX, frozen, plugs);
   }
 
   static Trip requireTrip(PlannerInput input, TripId id) {
@@ -57,7 +60,8 @@ final class RouteReplay {
       int floorPercent,
       Set<String> drop,
       Mode mode,
-      Predicate<Trip> frozen) {
+      Predicate<Trip> frozen,
+      PlugCalendar plugs) {
     Map<String, VehicleSchedule> byCab = index(plan);
     List<CabCursor> cursors = new ArrayList<>();
     List<Trip> lifted = new ArrayList<>();
@@ -66,7 +70,8 @@ final class RouteReplay {
       CabCursor cursor = new CabCursor(cab);
       VehicleSchedule schedule = byCab.remove(cab.vehicle().id().value());
       if (schedule != null
-          && !apply(input, cursor, schedule, floorPercent, drop, mode, frozen, lifted, seen)) {
+          && !apply(
+              input, cursor, schedule, floorPercent, drop, mode, frozen, lifted, seen, plugs)) {
         return Outcome.halt();
       }
       cursors.add(cursor);
@@ -86,9 +91,10 @@ final class RouteReplay {
       Mode mode,
       Predicate<Trip> frozen,
       List<Trip> lifted,
-      Set<String> seen) {
+      Set<String> seen,
+      PlugCalendar plugs) {
     for (RouteActivity activity : schedule.activities()) {
-      if (!keep(input, cursor, activity, floorPercent, drop, mode, frozen, lifted, seen)) {
+      if (!keep(input, cursor, activity, floorPercent, drop, mode, frozen, lifted, seen, plugs)) {
         return false;
       }
     }
@@ -104,9 +110,14 @@ final class RouteReplay {
       Mode mode,
       Predicate<Trip> frozen,
       List<Trip> lifted,
-      Set<String> seen) {
+      Set<String> seen,
+      PlugCalendar plugs) {
+    if (activity instanceof ChargingSession session) {
+      SessionReplay.adopt(cursor, input, session, plugs);
+      return true;
+    }
     if (!(activity instanceof TripAssignment assignment)) {
-      throw new IllegalArgumentException("charging sessions are not rebuilt by this operator");
+      throw new IllegalArgumentException("route activity is not a trip or a charge stop");
     }
     Trip trip = requireTrip(input, assignment.trip().id());
     if (!seen.add(trip.id().value())) {
@@ -118,7 +129,7 @@ final class RouteReplay {
     }
     AppendProbe probe = cursor.offer(input, trip, floorPercent);
     if (probe.feasible()) {
-      cursor.commit(probe.assignment().orElseThrow());
+      cursor.commit(input, probe, plugs);
       return true;
     }
     if (mode == Mode.STRICT) {

@@ -39,11 +39,12 @@ final class RepairLoop {
       return destroyed.kept();
     }
     FleetPlan kept = destroyed.kept();
-    List<CabCursor> cursors = RouteReplay.load(input, kept, config.planningFloorPercent());
+    PlugCalendar plugs = new PlugCalendar();
+    List<CabCursor> cursors = RouteReplay.load(input, kept, config.planningFloorPercent(), plugs);
     List<Trip> remaining = new ArrayList<>();
     Set<String> wanted = wanted(input, destroyed, remaining);
     List<UnassignedTrip> unassigned = carryOver(kept, wanted);
-    RegretInserter.insert(input, config, clock, cursors, remaining, unassigned, regretDepth);
+    RegretInserter.insert(input, config, clock, cursors, remaining, unassigned, plugs, regretDepth);
     return PlanAssembler.assemble(input, kept.planId(), kept.seed(), cursors, unassigned);
   }
 

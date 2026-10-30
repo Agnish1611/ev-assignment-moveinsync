@@ -15,12 +15,12 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Regret-2 construction. Trips that do not fit, and trips still open when the deadline passes, go
- * to backup. Charging sessions are not inserted; a cab that cannot finish a trip above the planning
- * floor and still reach a hub leaves that trip unassigned.
+ * Regret-2 construction. A trip that fails on energy or reserve is offered one charge stop when a
+ * hub session fits before the pickup. Trips that still do not fit, and trips still open when the
+ * deadline passes, go to backup.
  *
- * <p>Time O(T^2 · C · H) for T trips, C cabs, and H hubs. Space O(T + C). The deadline is polled
- * before each insertion. A deadline that has already passed returns the backup plan.
+ * <p>Time O(T^2 · C · H · P) for T trips, C cabs, H hubs, and P plugs. Space O(T + C). The deadline
+ * is polled before each insertion. A deadline that has already passed returns the backup plan.
  */
 public final class GreedyConstructionSolver implements FleetSolver {
 
@@ -36,8 +36,9 @@ public final class GreedyConstructionSolver implements FleetSolver {
     List<CabCursor> cursors = CabCursor.open(input);
     List<Trip> remaining = new ArrayList<>(input.trips());
     List<UnassignedTrip> unassigned = new ArrayList<>();
+    PlugCalendar plugs = new PlugCalendar();
     boolean exhausted =
-        RegretInserter.insert(input, config, clock, cursors, remaining, unassigned, 2);
+        RegretInserter.insert(input, config, clock, cursors, remaining, unassigned, plugs, 2);
     FleetPlan plan =
         PlanAssembler.assemble(
             input, "greedy-" + input.inputHash(), config.seed(), cursors, unassigned);

@@ -6,14 +6,18 @@ import com.moveinsync.ev.domain.consumption.ConstantConsumptionModel;
 import com.moveinsync.ev.domain.distance.ConstantSpeedDistanceProvider;
 import com.moveinsync.ev.domain.hub.Charger;
 import com.moveinsync.ev.domain.hub.Hub;
+import com.moveinsync.ev.domain.hub.HubId;
 import com.moveinsync.ev.domain.location.Location;
 import com.moveinsync.ev.domain.schedule.FleetPlan;
+import com.moveinsync.ev.domain.tariff.TariffSchedule;
+import com.moveinsync.ev.domain.tariff.UtcTariffWindow;
 import com.moveinsync.ev.domain.tenant.TenantId;
 import com.moveinsync.ev.domain.trip.Trip;
 import com.moveinsync.ev.domain.trip.TripId;
 import com.moveinsync.ev.domain.vehicle.Vehicle;
 import com.moveinsync.ev.domain.vehicle.VehicleId;
 import com.moveinsync.ev.planner.config.SolverConfig;
+import com.moveinsync.ev.planner.construct.AlnsFleetSolver;
 import com.moveinsync.ev.planner.construct.GreedyConstructionSolver;
 import com.moveinsync.ev.planner.construct.RandomTripRemoval;
 import com.moveinsync.ev.planner.construct.RegretRepairOperator;
@@ -28,6 +32,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.SplittableRandom;
 import org.junit.jupiter.api.Test;
 
@@ -87,7 +92,7 @@ class GreedyBaselineValidatorTest {
     PlannerInput fleet =
         shell(1)
             .addCab(cab("CAB-1", 11_000L, DEPOT))
-            .addTrip(trip("TRIP-T", START.plusSeconds(600), DEPOT, DEPOT))
+            .addTrip(trip("TRIP-T", START.plusSeconds(30), DEPOT, DEPOT))
             .build();
 
     SolveResult result = solver.solve(fleet, CONFIG, EARLY);
@@ -110,6 +115,43 @@ class GreedyBaselineValidatorTest {
     assertThat(destroyed.removedTripIds()).isNotEmpty();
     assertThat(repaired.totalAssignedTrips()).isEqualTo(20);
     assertValid(fleet, repaired);
+  }
+
+  @Test
+  void aChargeStopPassesTheValidator() {
+    PlannerInput fleet =
+        shell(1)
+            .addCab(cab("CAB-1", 12_000L, DEPOT))
+            .addTrip(
+                trip(
+                    "TRIP-C",
+                    START.plusSeconds(3_600),
+                    Location.of("LOC-P", "Pickup"),
+                    Location.of("LOC-D", "Drop")))
+            .addTariff(
+                new TariffSchedule(
+                    HubId.of("HUB-1"),
+                    List.of(new UtcTariffWindow(HubId.of("HUB-1"), START, END, 100_000L))))
+            .build();
+
+    SolveResult result = solver.solve(fleet, CONFIG, EARLY);
+
+    assertThat(result.plan().totalAssignedTrips()).isEqualTo(1);
+    assertThat(result.plan().totalChargingSessions()).isEqualTo(1);
+    assertThat(result.plan().totalChargingCostMicros()).isPositive();
+    assertValid(fleet, result.plan());
+  }
+
+  @Test
+  void searchOnTheBaselineStillPassesTheValidator() {
+    PlannerInput fleet = twentyCabs();
+    SolverConfig search = CONFIG.withIterations(4);
+
+    SolveResult result = new AlnsFleetSolver().solve(fleet, search, EARLY);
+
+    assertThat(result.plan().totalAssignedTrips()).isEqualTo(20);
+    assertThat(result.deadlineExhausted()).isFalse();
+    assertValid(fleet, result.plan());
   }
 
   private static void assertValid(PlannerInput fleet, FleetPlan plan) {
@@ -171,6 +213,7 @@ class GreedyBaselineValidatorTest {
     fleet.trips().forEach(builder::addTrip);
     fleet.hubs().forEach(builder::addHub);
     fleet.chargers().forEach(builder::addCharger);
+    fleet.tariffs().forEach(schedule -> schedule.windows().forEach(builder::addUtcTariff));
     return builder.build();
   }
 }

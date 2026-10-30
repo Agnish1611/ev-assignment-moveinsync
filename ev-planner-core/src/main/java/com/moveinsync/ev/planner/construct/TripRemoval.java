@@ -64,7 +64,8 @@ final class TripRemoval {
             plan,
             config.planningFloorPercent(),
             drop,
-            trip -> frozen(trip, now, config.lockWindowSeconds()));
+            trip -> frozen(trip, now, config.lockWindowSeconds()),
+            new PlugCalendar());
     if (outcome.aborted()) {
       return new DestroyedPlan(plan, List.of());
     }
