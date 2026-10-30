@@ -16,7 +16,10 @@ import com.moveinsync.ev.domain.location.Location;
 import com.moveinsync.ev.domain.schedule.ChargingSession;
 import com.moveinsync.ev.domain.schedule.FleetPlan;
 import com.moveinsync.ev.domain.schedule.TripAssignment;
+import com.moveinsync.ev.domain.schedule.UnassignedReasonCode;
+import com.moveinsync.ev.domain.schedule.UnassignedTrip;
 import com.moveinsync.ev.domain.schedule.VehicleSchedule;
+import com.moveinsync.ev.domain.tenant.TenantId;
 import com.moveinsync.ev.domain.trip.Trip;
 import com.moveinsync.ev.domain.trip.TripId;
 import com.moveinsync.ev.domain.vehicle.Vehicle;
@@ -997,5 +1000,127 @@ class PlanValidatorMutationTest {
     ValidationReport report = localValidator.validate(plan);
     assertThat(report.isValid()).isFalse();
     assertThat(report.violationsFor(RuleId.CHARGER_UNAVAILABLE)).isNotEmpty();
+  }
+
+  @Test
+  @DisplayName("Mutation 21: Omitted required trip produces TRIP_OMITTED violation (F-07)")
+  void mutationOmittedRequiredTrip() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Trip extraTrip =
+        new Trip(
+            TripId.of("TRIP-EXTRA"),
+            t0.plusSeconds(3600),
+            pickupLoc,
+            dropoffLoc,
+            10_000,
+            1200,
+            t0.plusSeconds(5400),
+            "EMP-MUT-EXTRA");
+
+    ValidationInput input =
+        ValidationInput.builder()
+            .tenantId(TenantId.of("tenant-1"))
+            .horizon(baselineValidPlan.horizonStart(), baselineValidPlan.horizonEnd())
+            .consumptionModel(context.consumptionModel())
+            .distanceProvider(context.distanceProvider())
+            .chargingCurve(context.chargingCurve())
+            .batteryFloorPercentage(context.batteryFloorPercentage())
+            .enforceReserveToHub(context.enforceReserveToHub())
+            .addHub(hub1)
+            .addCharger(charger1)
+            .addVehicle(cab1, hub1Loc, 50_000L)
+            .addTrip(baselineTrip)
+            .addTrip(extraTrip)
+            .build();
+
+    // Baseline plan only assigns baselineTrip, unassignedTrips is empty, so extraTrip is omitted
+    ValidationReport report = validator.validate(input, baselineValidPlan);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.TRIP_OMITTED)).isNotEmpty();
+  }
+
+  @Test
+  @DisplayName("Mutation 22: Unknown unassigned trip produces TRIP_UNKNOWN violation (F-07)")
+  void mutationUnknownUnassignedTrip() {
+    Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
+    Trip unknownTrip =
+        new Trip(
+            TripId.of("TRIP-UNKNOWN-999"),
+            t0.plusSeconds(3600),
+            pickupLoc,
+            dropoffLoc,
+            10_000,
+            1200,
+            t0.plusSeconds(5400),
+            "EMP-MUT-UNKNOWN");
+
+    ValidationInput input =
+        ValidationInput.builder()
+            .tenantId(TenantId.of("tenant-1"))
+            .horizon(baselineValidPlan.horizonStart(), baselineValidPlan.horizonEnd())
+            .consumptionModel(context.consumptionModel())
+            .distanceProvider(context.distanceProvider())
+            .chargingCurve(context.chargingCurve())
+            .batteryFloorPercentage(context.batteryFloorPercentage())
+            .enforceReserveToHub(context.enforceReserveToHub())
+            .addHub(hub1)
+            .addCharger(charger1)
+            .addVehicle(cab1, hub1Loc, 50_000L)
+            .addTrip(baselineTrip)
+            .build();
+
+    FleetPlan planWithUnknownUnassigned =
+        new FleetPlan(
+            "P-UNKNOWN-UNASSIGNED",
+            "tenant-1",
+            baselineValidPlan.horizonStart(),
+            baselineValidPlan.horizonEnd(),
+            baselineValidPlan.vehicleSchedules(),
+            List.of(
+                UnassignedTrip.of(
+                    unknownTrip, UnassignedReasonCode.NO_CAB_FREE_IN_TIME_WINDOW, "No cab")),
+            999L,
+            "hash");
+
+    ValidationReport report = validator.validate(input, planWithUnknownUnassigned);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.TRIP_UNKNOWN)).isNotEmpty();
+  }
+
+  @Test
+  @DisplayName(
+      "Mutation 23: Trip assigned to cab and also listed in unassignedTrips produces TRIP_ASSIGNED_AND_UNASSIGNED (F-07)")
+  void mutationTripAssignedAndUnassigned() {
+    ValidationInput input =
+        ValidationInput.builder()
+            .tenantId(TenantId.of("tenant-1"))
+            .horizon(baselineValidPlan.horizonStart(), baselineValidPlan.horizonEnd())
+            .consumptionModel(context.consumptionModel())
+            .distanceProvider(context.distanceProvider())
+            .chargingCurve(context.chargingCurve())
+            .batteryFloorPercentage(context.batteryFloorPercentage())
+            .enforceReserveToHub(context.enforceReserveToHub())
+            .addHub(hub1)
+            .addCharger(charger1)
+            .addVehicle(cab1, hub1Loc, 50_000L)
+            .addTrip(baselineTrip)
+            .build();
+
+    FleetPlan planWithDuplicate =
+        new FleetPlan(
+            "P-DUPLICATE-UNASSIGNED",
+            "tenant-1",
+            baselineValidPlan.horizonStart(),
+            baselineValidPlan.horizonEnd(),
+            baselineValidPlan.vehicleSchedules(),
+            List.of(
+                UnassignedTrip.of(
+                    baselineTrip, UnassignedReasonCode.OTHER, "Conflictingly marked unassigned")),
+            999L,
+            "hash");
+
+    ValidationReport report = validator.validate(input, planWithDuplicate);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.TRIP_ASSIGNED_AND_UNASSIGNED)).isNotEmpty();
   }
 }

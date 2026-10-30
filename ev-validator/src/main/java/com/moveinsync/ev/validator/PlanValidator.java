@@ -4,11 +4,16 @@ import com.moveinsync.ev.domain.schedule.ChargingSession;
 import com.moveinsync.ev.domain.schedule.FleetPlan;
 import com.moveinsync.ev.domain.schedule.RouteActivity;
 import com.moveinsync.ev.domain.schedule.TripAssignment;
+import com.moveinsync.ev.domain.schedule.UnassignedTrip;
 import com.moveinsync.ev.domain.schedule.VehicleSchedule;
 import com.moveinsync.ev.domain.tenant.TenantId;
+import com.moveinsync.ev.domain.trip.Trip;
+import com.moveinsync.ev.domain.trip.TripId;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Independent plan validation engine for electric vehicle fleet charging and trip assignments.
@@ -64,6 +69,7 @@ public final class PlanValidator {
       List<PlanViolation> violations = new ArrayList<>();
       checkTenants(input, candidate, violations);
       checkReferentialIntegrity(input, candidate, violations);
+      checkTripCompleteness(input, candidate, violations);
 
       ValidationContext valCtx = input.toValidationContext();
       runInvariants(valCtx, candidate, violations);
@@ -111,6 +117,9 @@ public final class PlanValidator {
           b.addTrip(ta.trip());
         }
       }
+    }
+    for (UnassignedTrip ut : plan.unassignedTrips()) {
+      b.addTrip(ut.trip());
     }
     return validate(b.build(), plan);
   }
@@ -164,6 +173,24 @@ public final class PlanValidator {
         }
       }
     }
+    for (UnassignedTrip unassigned : candidate.unassignedTrips()) {
+      if (!unassigned.trip().tenantId().value().equals("default")
+          && !input.tenantId().equals(unassigned.trip().tenantId())) {
+        violations.add(
+            PlanViolation.ofTrip(
+                RuleId.TENANT_MISMATCH,
+                unassigned.trip().id(),
+                null,
+                unassigned.trip().startTs(),
+                "Unassigned trip "
+                    + unassigned.trip().id()
+                    + " tenant ("
+                    + unassigned.trip().tenantId().value()
+                    + ") does not match input tenant ("
+                    + input.tenantId().value()
+                    + ")"));
+      }
+    }
   }
 
   private void checkReferentialIntegrity(
@@ -206,6 +233,59 @@ public final class PlanValidator {
                     "Charger " + session.chargerId() + " is not registered in ground truth"));
           }
         }
+      }
+    }
+  }
+
+  private void checkTripCompleteness(
+      ValidationInput input, FleetPlan candidate, List<PlanViolation> violations) {
+    Set<TripId> assignedTripIds = new HashSet<>();
+    for (VehicleSchedule schedule : candidate.vehicleSchedules()) {
+      for (RouteActivity activity : schedule.activities()) {
+        if (activity instanceof TripAssignment assign) {
+          assignedTripIds.add(assign.trip().id());
+        }
+      }
+    }
+
+    Set<TripId> unassignedTripIds = new HashSet<>();
+    for (UnassignedTrip unassigned : candidate.unassignedTrips()) {
+      TripId tripId = unassigned.trip().id();
+      if (input.findTrip(tripId).isEmpty()) {
+        violations.add(
+            PlanViolation.ofTrip(
+                RuleId.TRIP_UNKNOWN,
+                tripId,
+                null,
+                unassigned.trip().startTs(),
+                "Unassigned trip " + tripId + " is not registered in ground truth"));
+      }
+      if (assignedTripIds.contains(tripId)) {
+        violations.add(
+            PlanViolation.ofTrip(
+                RuleId.TRIP_ASSIGNED_AND_UNASSIGNED,
+                tripId,
+                null,
+                unassigned.trip().startTs(),
+                "Trip "
+                    + tripId
+                    + " appears simultaneously in both assigned schedules and unassigned list"));
+      }
+      unassignedTripIds.add(tripId);
+    }
+
+    for (Trip requiredTrip : input.trips().values()) {
+      TripId id = requiredTrip.id();
+      if (!assignedTripIds.contains(id) && !unassignedTripIds.contains(id)) {
+        violations.add(
+            PlanViolation.ofTrip(
+                RuleId.TRIP_OMITTED,
+                id,
+                null,
+                requiredTrip.startTs(),
+                "Required trip "
+                    + id
+                    + " is omitted from both assigned schedules and unassigned list"));
       }
     }
   }

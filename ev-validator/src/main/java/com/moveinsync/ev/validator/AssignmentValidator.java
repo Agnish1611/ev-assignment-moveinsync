@@ -5,7 +5,6 @@ import com.moveinsync.ev.domain.schedule.ChargingSession;
 import com.moveinsync.ev.domain.schedule.FleetPlan;
 import com.moveinsync.ev.domain.schedule.RouteActivity;
 import com.moveinsync.ev.domain.schedule.TripAssignment;
-import com.moveinsync.ev.domain.schedule.UnassignedTrip;
 import com.moveinsync.ev.domain.schedule.VehicleSchedule;
 import com.moveinsync.ev.domain.trip.TripId;
 import com.moveinsync.ev.domain.vehicle.VehicleId;
@@ -60,21 +59,6 @@ final class AssignmentValidator {
                     + entry.getKey()
                     + " is assigned multiple times to vehicles: "
                     + entry.getValue()));
-      }
-    }
-
-    // Check for conflict with unassigned trips list
-    for (UnassignedTrip unassigned : plan.unassignedTrips()) {
-      if (assignedTrips.containsKey(unassigned.trip().id())) {
-        violations.add(
-            PlanViolation.ofTrip(
-                RuleId.H4_DOUBLE_ASSIGNMENT,
-                unassigned.trip().id(),
-                null,
-                null,
-                "Trip "
-                    + unassigned.trip().id()
-                    + " appears in both assigned schedules and unassigned backup list"));
       }
     }
   }
