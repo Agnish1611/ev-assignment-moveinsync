@@ -193,15 +193,16 @@ class ValidationScaleBenchmarkTest {
 
   private void writeBenchmarkReport(double p50Millis, double p99Millis) {
     try {
-      java.nio.file.Path rootDocs =
-          java.nio.file.Files.exists(java.nio.file.Path.of("docs"))
-              ? java.nio.file.Path.of("docs")
-              : java.nio.file.Path.of("..", "docs");
-      java.nio.file.Path reportPath =
-          rootDocs.resolve("reports").resolve("VALIDATION_300CAB_REPORT.md");
-      if (java.nio.file.Files.exists(reportPath)
-          && !"true".equalsIgnoreCase(System.getenv("RELEASE_CANDIDATE"))) {
-        return;
+      java.nio.file.Path reportPath;
+      if (Boolean.getBoolean("writeTrackedReport")
+          || "true".equalsIgnoreCase(System.getenv("WRITE_TRACKED_REPORT"))) {
+        java.nio.file.Path rootDocs =
+            java.nio.file.Files.exists(java.nio.file.Path.of("docs"))
+                ? java.nio.file.Path.of("docs")
+                : java.nio.file.Path.of("..", "docs");
+        reportPath = rootDocs.resolve("reports").resolve("VALIDATION_300CAB_REPORT.md");
+      } else {
+        reportPath = java.nio.file.Path.of("target", "reports", "VALIDATION_300CAB_REPORT.md");
       }
       java.nio.file.Files.createDirectories(reportPath.getParent());
       String content =
