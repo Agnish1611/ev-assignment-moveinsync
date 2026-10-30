@@ -20,3 +20,9 @@ Decisions not covered in `docs/ARCHITECTURE.md` are recorded here (one line: dec
 | 2026-10-30 | D4: Charger availability, outage windows, and plug double-booking checks | Enforces physical charger status, half-open outage intervals, and single-session-per-plug invariant |
 | 2026-10-30 | D5: Totality guard in `PlanValidator` failing closed (`VALIDATOR_INTERNAL_ERROR`) | Validator must never crash caller on unexpected runtime exceptions; fails closed with invalid report |
 | 2026-10-30 | D6: Deterministic violation ordering and deduplication | Comparator sorts by rule, vehicle, trip, hub, time, message to guarantee identical outputs across permutations |
+| 2026-10-30 | D7: Battery floor is inclusive (`SoC >= floorWh`) | Exactly 15% (e.g. 7,501 Wh on 50,001 Wh battery) is VALID; shaving 1 Wh (7,500 Wh) is strictly INVALID (H1) |
+| 2026-10-30 | D8: Deadhead factor application | Traffic basis points and AC factors apply to deadhead travel identically to loaded trip segments |
+| 2026-10-30 | D9: Idle power dissipation convention | Default 0 W; represented as non-negative integer Watts dissipated continuously during stationary idle gaps |
+| 2026-10-30 | D10: Charging horizon containment | All activities and charging sessions must be fully contained within the plan horizon `[horizonStart, horizonEnd]` |
+| 2026-10-30 | D11: Consumption rounding order | Base distance energy rounded UP to Wh, then traffic basis points applied and rounded UP, then AC basis points applied and rounded UP |
+| 2026-10-30 | D12: Outward slot quantisation vs continuous validation | Planners may quantise to 60s discrete grid rounding outwards; independent validator evaluates exact continuous epoch seconds |
