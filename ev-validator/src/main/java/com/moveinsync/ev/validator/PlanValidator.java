@@ -1,5 +1,6 @@
 package com.moveinsync.ev.validator;
 
+import com.moveinsync.ev.domain.hub.HubId;
 import com.moveinsync.ev.domain.schedule.ChargingSession;
 import com.moveinsync.ev.domain.schedule.FleetPlan;
 import com.moveinsync.ev.domain.schedule.RouteActivity;
@@ -9,7 +10,10 @@ import com.moveinsync.ev.domain.schedule.VehicleSchedule;
 import com.moveinsync.ev.domain.tenant.TenantId;
 import com.moveinsync.ev.domain.trip.Trip;
 import com.moveinsync.ev.domain.trip.TripId;
+import com.moveinsync.ev.domain.vehicle.VehicleId;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -26,6 +30,14 @@ import java.util.Set;
  * or {@code ev-service}.
  */
 public final class PlanValidator {
+
+  private static final Comparator<PlanViolation> VIOLATION_ORDER =
+      Comparator.comparing(PlanViolation::ruleId)
+          .thenComparing(v -> v.vehicleId().map(VehicleId::value).orElse(""))
+          .thenComparing(v -> v.tripId().map(TripId::value).orElse(""))
+          .thenComparing(v -> v.hubId().map(HubId::value).orElse(""))
+          .thenComparing(v -> v.violationTime().map(Instant::toString).orElse(""))
+          .thenComparing(PlanViolation::message);
 
   private final ValidationContext context;
 
@@ -74,8 +86,11 @@ public final class PlanValidator {
       ValidationContext valCtx = input.toValidationContext();
       runInvariants(valCtx, candidate, violations);
 
+      List<PlanViolation> sortedViolations =
+          violations.stream().distinct().sorted(VIOLATION_ORDER).toList();
+
       return new ValidationReport(
-          violations,
+          sortedViolations,
           candidate.vehicleSchedules().size(),
           candidate.totalAssignedTrips(),
           candidate.totalChargingSessions());

@@ -11,7 +11,7 @@ import com.moveinsync.ev.domain.schedule.VehicleSchedule;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,8 +37,12 @@ final class ChargerCapacityValidator {
   List<PlanViolation> validate(FleetPlan plan) {
     List<PlanViolation> violations = new ArrayList<>();
     Map<HubId, List<ChargingSession>> sessionsByHub = collectSessionsByHub(plan);
+    List<Map.Entry<HubId, List<ChargingSession>>> sortedHubEntries =
+        sessionsByHub.entrySet().stream()
+            .sorted(Comparator.comparing(e -> e.getKey().value()))
+            .toList();
 
-    for (Map.Entry<HubId, List<ChargingSession>> entry : sessionsByHub.entrySet()) {
+    for (Map.Entry<HubId, List<ChargingSession>> entry : sortedHubEntries) {
       HubId hubId = entry.getKey();
       List<ChargingSession> sessions = entry.getValue();
 
@@ -63,7 +67,7 @@ final class ChargerCapacityValidator {
   }
 
   private Map<HubId, List<ChargingSession>> collectSessionsByHub(FleetPlan plan) {
-    Map<HubId, List<ChargingSession>> map = new HashMap<>();
+    Map<HubId, List<ChargingSession>> map = new LinkedHashMap<>();
     for (VehicleSchedule schedule : plan.vehicleSchedules()) {
       for (RouteActivity activity : schedule.activities()) {
         if (activity instanceof ChargingSession session) {
@@ -127,12 +131,17 @@ final class ChargerCapacityValidator {
 
   private void validatePlugConflicts(
       List<ChargingSession> sessions, HubId hubId, List<PlanViolation> violations) {
-    Map<ChargerId, List<ChargingSession>> byCharger = new HashMap<>();
+    Map<ChargerId, List<ChargingSession>> byCharger = new LinkedHashMap<>();
     for (ChargingSession s : sessions) {
       byCharger.computeIfAbsent(s.chargerId(), k -> new ArrayList<>()).add(s);
     }
 
-    for (Map.Entry<ChargerId, List<ChargingSession>> entry : byCharger.entrySet()) {
+    List<Map.Entry<ChargerId, List<ChargingSession>>> sortedChargerEntries =
+        byCharger.entrySet().stream()
+            .sorted(Comparator.comparing(e -> e.getKey().value()))
+            .toList();
+
+    for (Map.Entry<ChargerId, List<ChargingSession>> entry : sortedChargerEntries) {
       List<ChargingSession> plugSessions = entry.getValue();
       plugSessions.sort(Comparator.comparing(ChargingSession::startTime));
 

@@ -11,7 +11,7 @@ import com.moveinsync.ev.domain.vehicle.VehicleId;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,7 +35,7 @@ final class AssignmentValidator {
   }
 
   private void validateSingleAssignment(FleetPlan plan, List<PlanViolation> violations) {
-    Map<TripId, List<VehicleId>> assignedTrips = new HashMap<>();
+    Map<TripId, List<VehicleId>> assignedTrips = new LinkedHashMap<>();
     for (VehicleSchedule schedule : plan.vehicleSchedules()) {
       for (RouteActivity activity : schedule.activities()) {
         if (activity instanceof TripAssignment assign) {
@@ -47,7 +47,11 @@ final class AssignmentValidator {
     }
 
     // Check for duplicate assignments in fleet schedules
-    for (Map.Entry<TripId, List<VehicleId>> entry : assignedTrips.entrySet()) {
+    List<Map.Entry<TripId, List<VehicleId>>> sortedEntries =
+        assignedTrips.entrySet().stream()
+            .sorted(Comparator.comparing(e -> e.getKey().value()))
+            .toList();
+    for (Map.Entry<TripId, List<VehicleId>> entry : sortedEntries) {
       if (entry.getValue().size() > 1) {
         violations.add(
             PlanViolation.ofTrip(
@@ -64,7 +68,11 @@ final class AssignmentValidator {
   }
 
   private void validateNoOverlap(FleetPlan plan, List<PlanViolation> violations) {
-    for (VehicleSchedule schedule : plan.vehicleSchedules()) {
+    List<VehicleSchedule> sortedSchedules =
+        plan.vehicleSchedules().stream()
+            .sorted(Comparator.comparing(s -> s.vehicleId().value()))
+            .toList();
+    for (VehicleSchedule schedule : sortedSchedules) {
       List<RouteActivity> activities = new ArrayList<>(schedule.activities());
       activities.sort(Comparator.comparing(RouteActivity::activityStartTime));
 
