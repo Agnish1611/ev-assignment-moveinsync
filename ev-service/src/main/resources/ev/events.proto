@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package ev;
+
+// Versioned envelope. Add fields. Never reuse or renumber one.
+message Envelope {
+  string event_id = 1;
+  string tenant = 2;
+  string producer = 3;
+  int64 seq = 4;
+  int64 event_time_seconds = 5;
+  int32 schema_version = 6;
+  int32 event_time_nanos = 7;
+  oneof payload {
+    Telemetry telemetry = 10;
+    ChargerStatus charger_status = 11;
+    PlanTrigger plan_trigger = 12;
+    PlanPublished plan_published = 13;
+  }
+}
+
+message Telemetry {
+  string cab_id = 1;
+  int64 soc_wh = 2;
+}
+
+message ChargerStatus {
+  string hub_id = 1;
+  string charger_id = 2;
+  bool operational = 3;
+}
+
+message PlanTrigger {
+  string kind = 1;
+  string subject_id = 2;
+  int64 observed_seconds = 3;
+  int32 observed_nanos = 4;
+  bool has_soc = 5;
+  int64 reported_soc_wh = 6;
+  string shard = 7;
+}
+
+message PlanPublished {
+  string shard = 1;
+  int64 version = 2;
+}

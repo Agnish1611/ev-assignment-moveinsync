@@ -33,6 +33,7 @@
         <slf4j.version>2.0.16</slf4j.version>
         <spotbugs-annotations.version>4.9.2</spotbugs-annotations.version>
         <jmh.version>1.37</jmh.version>
+        <protobuf.version>4.36.2</protobuf.version>
 
         <!-- Latest plugin versions -->
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
@@ -106,6 +107,12 @@
                 <version>${testcontainers.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuf.version}</version>
             </dependency>
 
             <!-- SpotBugs annotations -->

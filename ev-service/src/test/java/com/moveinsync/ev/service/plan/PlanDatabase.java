@@ -92,6 +92,7 @@ final class PlanDatabase {
     try (Connection connection = source.getConnection();
         Statement statement = connection.createStatement()) {
       statement.execute("GRANT ev_app TO CURRENT_USER");
+      statement.execute("GRANT ev_relay TO CURRENT_USER");
     } catch (SQLException ex) {
       throw new IllegalStateException("ev_app was not granted", ex);
     }

@@ -13,6 +13,6 @@ Traceability between case study requirements and verification evidence.
 | Heuristic + complexity + lower bound | Javadoc Big-O + lower-bound report in `docs/reports/` | Phase 5, 6, 7 |
 | Independent validator run on every result | ArchUnit isolation test + validator invoked in publish path | `ValidatorArchitectureTest` keeps the validator off the planner. `PlanPublication` stores a head only when `PlanValidator` accepts the plan (D27). HTTP publish remains Phase 11 |
 | 300-cab case in < 30 s with report | Benchmark test + committed report | Planner solve: `BenchmarkScenarioTest` and `docs/reports/PLANNER_300CAB_REPORT.md`. Validator latency: `docs/reports/VALIDATION_300CAB_REPORT.md` |
-| Concurrency + failure tests | Named tests listed in README | `PlanPublicationIT` runs two writers on one shard: one head advances, the other conflicts (D27). Kafka failure tests remain Phase 10. The drift storm remains Phase 13 |
+| Concurrency + failure tests | Named tests listed in README | `PlanPublicationIT` runs two writers on one shard: one head advances, the other conflicts (D27). `DeliveryTest` drops a duplicate, drops a late sequence, and dead-letters a poison payload (D28). `OutboxRelayIT` publishes the outbox once. Killing a worker mid-solve and the drift storm remain Phase 13 |
 | Throughput and p50/p99 | k6/JMH output in README with machine specs | Phase 13 |
 | One-command run | CI job doing `docker compose up` smoke test | Phase 0, 14 |
