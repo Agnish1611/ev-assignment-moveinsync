@@ -24,6 +24,16 @@ The compose broker uses replication factor 1. Production is replication factor 3
 
 Keycloak users `operator`, `employee`, `admin`, and `device` each use that same word as the password. All four are in tenant `tenant-a`. The client is `ev-api`. A walkthrough is [docs/DEMO.md](docs/DEMO.md). The design note is [docs/DESIGN_NOTE.md](docs/DESIGN_NOTE.md). A Postman collection is `deploy/postman/ev-fleet.postman_collection.json`.
 
+## Assumptions
+
+- Backup petrol and diesel cabs are unlimited. A trip the electric fleet cannot cover is reported as demand, with a reason.
+- A cab belongs to one shift plan at a time.
+- A vehicle has a maximum charge-acceptance power. Plug power is the minimum of that and the charger.
+- A charging session is one contiguous interval.
+- Employees are opaque ids. The tenant and the role come from the token claims `tenant_id` and `role`.
+- Energy is whole watt-hours, distance is metres, and time is UTC epoch seconds. The planner keeps an 18 percent margin. The validator enforces the 15 percent floor.
+- The 300-cab run is a generated evening fleet of that size. Every trip fits, so the backup count is 0 and matches the lower bound in `docs/reports/PLANNER_300CAB_REPORT.md`. The case study's illustration of 1,462 covered trips and 38 backups is a tighter demand pattern than this generated fleet. `AssignmentDiagnosis` explains a trip when the fleet cannot cover it. `LadderReplanTest` is the cab that arrives at 22 percent instead of 41 percent.
+
 ## Architecture & Modules
 
 The platform is designed in strict accordance with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md):
@@ -80,9 +90,28 @@ The physical charging profile is governed by a deterministic two-segment piecewi
 
 Plan writes prefer consistency. A version becomes the head only after the independent validator accepts it, and only if the compare-and-set still sees the expected version. A failed write leaves the previous head. Reads stay available from the cache for the lifetimes in decision D30.
 
-Re-plans prefer a short deadline and a stable assignment over a better objective. The ladder stops when the clock reaches the deadline and keeps the last validator-clean plan. The objective is fewer backup trips first, then the change penalty times changed assignments, plus charging cost.
+A plan with fewer backup trips beats any plan with more, whatever the charging bill. Among plans with the same backup count, the cheaper charging plan wins. The flow re-timer may move a session onto a cheaper tariff after the assignments are frozen. A re-plan also pays a change penalty, so a small saving that moves many assignments loses. The ladder stops when the clock reaches the deadline and keeps the last validator-clean plan.
 
 [docs/DESIGN_NOTE.md](docs/DESIGN_NOTE.md) records what this build leaves out, including the live failover of one web instance and the fact that those instances do not run the solver.
+
+## Caching
+
+A published plan version is cached by tenant, shard, and version. It has no expiry. The cache is size-bounded. The current head expires after 2 seconds and is dropped when a plan-published event arrives. Fleet rows expire after 60 seconds and are dropped when a config event for that tenant arrives. Base distance is cached for 24 hours. Traffic is not cached. A missed event is bounded by those lifetimes. Decision D30 records the sizes.
+
+## Proof
+
+| What the case study asks for | Where it is proved |
+|---|---|
+| Battery floor, charger capacity, trip timing | `PlanValidatorTest`, `PlanValidatorMutationTest`, `PlanValidatorPropertyTest` |
+| 22 percent drift within 2 seconds, at most two other changes | `LadderReplanTest` |
+| Charger failure | `ChargerTriggerTest` |
+| Why a trip is unassigned | `AssignmentDiagnosisTest` |
+| Per-cab timeline with charge at each step | `CabTimelineTest`, `HttpAccessIT` |
+| 300 cabs, 40 chargers, 1,500 trips in under 30 seconds | `BenchmarkScenarioTest`, `docs/reports/PLANNER_300CAB_REPORT.md`, `docs/reports/VALIDATION_300CAB_REPORT.md` |
+| Two writers on one shard | `PlanPublicationIT.twoWritersCannotBothAdvanceTheHead` |
+| Kill mid-solve, duplicate, reorder, poison, dropped database | `WorkerCrashTest`, `DeliveryTest`, `ConnectionDropIT` |
+| One hundred cabs drifting together | `DriftStormTest` |
+| Tenant isolation and roles | `PlanTenancyIT`, `HttpAccessIT` |
 
 ## Verification Gate
 
@@ -112,4 +141,4 @@ Measured on an Apple M4 (10 cores, 16 GB, Darwin arm64) with Temurin 21.0.13+9-L
 | JMH charge duration across the 80 percent knee | 1.908 ± 0.132 ns/op |
 | k6, 10 users, 15 s, `GET /actuator/health` | 12,401.5 req/s, p50 684 µs, p99 1.7 ms, 186,023 responses, none failed |
 
-A single construction stays inside the 30 second budget at the case-study size of 300 cabs, 40 chargers, and 1,500 trips. That run already uses 24.258 s, and this build has no measured fleet larger than that. The k6 figure is the public health scrape. It is not a plan publish.
+Construction is O(T² · C · H · P) time and O(T + C) space for T trips, C cabs, H hubs, and P plugs. The lower bound is O(T · C · H + T log T) time and O(T) space. A single construction stays inside the 30 second budget at the case-study size of 300 cabs, 40 chargers, and 1,500 trips. That run already uses 24.258 s, and this build has no measured fleet larger than that. That is where one construction stops fitting the budget on this machine. The k6 figure is the public health scrape. It is not a plan publish. The validator on that same 300-cab plan is 3.290 ms at p50 and 5.113 ms at p99 (`docs/reports/VALIDATION_300CAB_REPORT.md`).
