@@ -45,21 +45,17 @@ class PlanValidatorDeterminismTest {
   private Location hub2Loc;
   private Location locA;
   private Location locB;
-
   private Hub hub1;
   private Hub hub2;
   private Charger chg1;
   private Charger chg2;
-
   private Vehicle cab1;
   private Vehicle cab2;
   private Vehicle cab3;
-
   private Trip trip1;
   private Trip trip2;
   private Trip trip3;
   private Trip trip4;
-
   private DistanceProvider distanceProvider;
   private PlanValidator validator;
 
@@ -80,46 +76,10 @@ class PlanValidatorDeterminismTest {
     cab3 = new Vehicle(VehicleId.of("CAB-03"), 60_000L, 150L, 50);
 
     Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
-    trip1 =
-        new Trip(
-            TripId.of("T1"),
-            t0.plusSeconds(600),
-            locA,
-            locB,
-            10_000,
-            1200,
-            t0.plusSeconds(3600),
-            "E1");
-    trip2 =
-        new Trip(
-            TripId.of("T2"),
-            t0.plusSeconds(1800),
-            locA,
-            locB,
-            10_000,
-            1200,
-            t0.plusSeconds(4000),
-            "E2");
-    trip3 =
-        new Trip(
-            TripId.of("T3"),
-            t0.plusSeconds(3000),
-            locA,
-            locB,
-            10_000,
-            1200,
-            t0.plusSeconds(6000),
-            "E3");
-    trip4 =
-        new Trip(
-            TripId.of("T4"),
-            t0.plusSeconds(4200),
-            locA,
-            locB,
-            10_000,
-            1200,
-            t0.plusSeconds(7000),
-            "E4");
+    trip1 = makeTrip("T1", t0.plusSeconds(600), t0.plusSeconds(3600), "E1");
+    trip2 = makeTrip("T2", t0.plusSeconds(1800), t0.plusSeconds(4000), "E2");
+    trip3 = makeTrip("T3", t0.plusSeconds(3000), t0.plusSeconds(6000), "E3");
+    trip4 = makeTrip("T4", t0.plusSeconds(4200), t0.plusSeconds(7000), "E4");
 
     Map<MatrixDistanceProvider.LocationPair, DistanceDuration> matrix =
         Map.of(
@@ -135,8 +95,24 @@ class PlanValidatorDeterminismTest {
                 DistanceDuration.of(5_000, 600));
     distanceProvider =
         new MatrixDistanceProvider(matrix, new ConstantSpeedDistanceProvider(5_000, 10));
-
     validator = new PlanValidator();
+  }
+
+  private Trip makeTrip(String id, Instant start, Instant latestFinish, String emp) {
+    return new Trip(TripId.of(id), start, locA, locB, 10_000, 1200, latestFinish, emp);
+  }
+
+  private static TripAssignment makeAssign(Trip trip, VehicleId cab, Instant actualPickup) {
+    return new TripAssignment(
+        trip,
+        cab,
+        actualPickup,
+        actualPickup.plusSeconds(1200),
+        5_000,
+        600,
+        750L,
+        49_250L,
+        47_750L);
   }
 
   @Test
@@ -145,18 +121,7 @@ class PlanValidatorDeterminismTest {
     Instant t0 = Instant.parse("2026-10-30T08:00:00Z");
     Instant tEnd = t0.plusSeconds(14400);
 
-    // Schedule 1: Cab1 with Trip1 (late pickup -> H3) and a charging session
-    TripAssignment assign1 =
-        new TripAssignment(
-            trip1,
-            cab1.id(),
-            trip1.startTs().plusSeconds(10),
-            trip1.startTs().plusSeconds(1210),
-            5_000,
-            600,
-            750L,
-            49_250L,
-            47_750L);
+    TripAssignment assign1 = makeAssign(trip1, cab1.id(), trip1.startTs().plusSeconds(10));
     ChargingSession sess1 =
         new ChargingSession(
             "S1",
@@ -171,20 +136,7 @@ class PlanValidatorDeterminismTest {
     VehicleSchedule sched1 =
         new VehicleSchedule(cab1, hub1Loc, 50_000L, t0, List.of(assign1, sess1));
 
-    // Schedule 2: Cab2 with Trip2 (late pickup -> H3) and concurrent charging session on Hub1
-    // (causing H2 violation:
-    // capacity=1, sessions=2)
-    TripAssignment assign2 =
-        new TripAssignment(
-            trip2,
-            cab2.id(),
-            trip2.startTs().plusSeconds(20),
-            trip2.startTs().plusSeconds(1220),
-            5_000,
-            600,
-            750L,
-            49_250L,
-            47_750L);
+    TripAssignment assign2 = makeAssign(trip2, cab2.id(), trip2.startTs().plusSeconds(20));
     ChargingSession sess2 =
         new ChargingSession(
             "S2",
@@ -199,25 +151,12 @@ class PlanValidatorDeterminismTest {
     VehicleSchedule sched2 =
         new VehicleSchedule(cab2, hub1Loc, 50_000L, t0, List.of(assign2, sess2));
 
-    // Schedule 3: Cab3 with intentional H3 violation (pickup 100 seconds late)
-    TripAssignment assign3Late =
-        new TripAssignment(
-            trip3,
-            cab3.id(),
-            trip3.startTs().plusSeconds(100),
-            trip3.startTs().plusSeconds(1300),
-            5_000,
-            600,
-            750L,
-            49_250L,
-            47_750L);
-    VehicleSchedule sched3 = new VehicleSchedule(cab3, hub1Loc, 50_000L, t0, List.of(assign3Late));
+    TripAssignment assign3 = makeAssign(trip3, cab3.id(), trip3.startTs().plusSeconds(100));
+    VehicleSchedule sched3 = new VehicleSchedule(cab3, hub1Loc, 50_000L, t0, List.of(assign3));
 
-    // Unassigned trip: trip4
     UnassignedTrip unassigned4 =
         UnassignedTrip.of(trip4, UnassignedReasonCode.CHARGER_CONGESTION, "No plug available");
 
-    // Baseline validation input
     ValidationInput baselineInput =
         ValidationInput.builder()
             .tenantId(TenantId.of("tenant-1"))
@@ -258,14 +197,11 @@ class PlanValidatorDeterminismTest {
     int expectedViolationCount = baselineReport.violations().size();
     String baselineSerialized = baselineReport.violations().toString();
 
-    // Permute across 200 random iterations
     Random rng = new Random(42);
     for (int i = 0; i < 200; i++) {
-      // Permute vehicle schedules
       List<VehicleSchedule> permutedSchedules = new ArrayList<>(List.of(sched1, sched2, sched3));
       Collections.shuffle(permutedSchedules, rng);
 
-      // Permute unassigned trips
       List<UnassignedTrip> permutedUnassigned = new ArrayList<>(List.of(unassigned4));
       Collections.shuffle(permutedUnassigned, rng);
 
@@ -280,7 +216,6 @@ class PlanValidatorDeterminismTest {
               42L,
               "hash-base");
 
-      // Permute input collections
       List<Hub> permutedHubs = new ArrayList<>(List.of(hub1, hub2));
       Collections.shuffle(permutedHubs, rng);
 
@@ -290,7 +225,7 @@ class PlanValidatorDeterminismTest {
       List<Trip> permutedTrips = new ArrayList<>(List.of(trip1, trip2, trip3, trip4));
       Collections.shuffle(permutedTrips, rng);
 
-      ValidationInput.Builder inputBuilder =
+      ValidationInputBuilder inputBuilder =
           ValidationInput.builder()
               .tenantId(TenantId.of("tenant-1"))
               .horizon(t0, tEnd)
@@ -312,9 +247,7 @@ class PlanValidatorDeterminismTest {
       assertThat(permutedReport.isValid()).isEqualTo(baselineReport.isValid());
       assertThat(permutedReport.violations().size()).isEqualTo(expectedViolationCount);
       assertThat(permutedReport.violations())
-          .as(
-              "Violations must match baseline element-for-element and in exact order at iteration %d",
-              i)
+          .as("Violations must match baseline at iteration %d", i)
           .isEqualTo(baselineReport.violations());
       assertThat(permutedReport.violations().toString())
           .as("String serialization must be byte-for-byte identical at iteration %d", i)

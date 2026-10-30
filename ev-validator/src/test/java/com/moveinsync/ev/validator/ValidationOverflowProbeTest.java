@@ -139,4 +139,115 @@ class ValidationOverflowProbeTest {
     assertThatThrownBy(() -> curve.calculateDurationSeconds(10_000L, 20_000L, 60_000L, 0))
         .isInstanceOf(IllegalArgumentException.class);
   }
+
+  @Test
+  @DisplayName(
+      "Candidate activity with Long.MAX_VALUE epoch timestamp explicitly produces ACTIVITY_OUTSIDE_HORIZON with no internal error")
+  void extremeEpochTimestampExplicitlyProducesActivityOutsideHorizon() {
+    Hub hub = Hub.of("tenant-overflow", "HUB-1", "H1", hubLoc, ZoneId.of("UTC"), 1);
+    Charger charger = Charger.of("tenant-overflow", "CHG-1", "HUB-1", 50);
+    Vehicle cab = new Vehicle(tenant, VehicleId.of("CAB-01"), 60_000L, 150L, 50);
+    DistanceProvider dist = new ConstantSpeedDistanceProvider(5000, 10);
+
+    ValidationInput input =
+        ValidationInput.builder()
+            .tenantId(tenant)
+            .horizon(t0, t0.plusSeconds(86400))
+            .addHub(hub)
+            .addCharger(charger)
+            .addVehicle(cab, hubLoc, 20_000L)
+            .distanceProvider(dist)
+            .consumptionModel(new ConstantConsumptionModel())
+            .batteryFloorPercentage(15)
+            .enforceReserveToHub(false)
+            .build();
+
+    // Session timestamp far outside horizon (Year 3000)
+    Instant extremeTime = Instant.parse("3000-01-01T00:00:00Z");
+    ChargingSession extremeSession =
+        new ChargingSession(
+            "S-EXTREME",
+            cab.id(),
+            hub.id(),
+            charger.id(),
+            extremeTime,
+            extremeTime.plusSeconds(1800),
+            20_000L,
+            40_000L,
+            1_000_000L);
+
+    FleetPlan plan =
+        new FleetPlan(
+            "P-EXTREME",
+            tenant.value(),
+            t0,
+            t0.plusSeconds(86400),
+            List.of(new VehicleSchedule(cab, hubLoc, 20_000L, t0, List.of(extremeSession))),
+            List.of(),
+            1L,
+            "h");
+
+    ValidationReport report = new PlanValidator().validate(input, plan);
+    assertThat(report.isValid()).isFalse();
+    // Explicit outcome: flagged as ACTIVITY_OUTSIDE_HORIZON, zero VALIDATOR_INTERNAL_ERROR
+    assertThat(report.violationsFor(RuleId.ACTIVITY_OUTSIDE_HORIZON)).isNotEmpty();
+    assertThat(report.violationsFor(RuleId.VALIDATOR_INTERNAL_ERROR)).isEmpty();
+  }
+
+  @Test
+  @DisplayName(
+      "Realistic fleet maxima (1,000 km legs, 250 kWh battery, 350 kW charger) produce no validator internal error")
+  void realisticFleetMaximaProduceNoValidatorInternalError() {
+    Location depot = Location.of("LOC-DEPOT", "Depot");
+    Location dest = Location.of("LOC-DEST", "Destination");
+
+    Hub megaHub = Hub.of("tenant-overflow", "HUB-MEGA", "Mega Hub", depot, ZoneId.of("UTC"), 10);
+    Charger megaCharger =
+        Charger.of("tenant-overflow", "CHG-MEGA", "HUB-MEGA", 350); // 350 kW charger
+    Vehicle heavyCab =
+        new Vehicle(tenant, VehicleId.of("CAB-HEAVY"), 250_000L, 250L, 350); // 250 kWh battery
+
+    // 1,000 km distance (1,000,000 meters) at 100 km/h (27.7 m/s) -> 36,000s
+    DistanceProvider longDist = new ConstantSpeedDistanceProvider(1_000_000, 36000);
+
+    ValidationInput input =
+        ValidationInput.builder()
+            .tenantId(tenant)
+            .horizon(t0, t0.plusSeconds(172800))
+            .addHub(megaHub)
+            .addCharger(megaCharger)
+            .addVehicle(heavyCab, depot, 250_000L)
+            .distanceProvider(longDist)
+            .consumptionModel(new ConstantConsumptionModel())
+            .batteryFloorPercentage(15)
+            .enforceReserveToHub(false)
+            .build();
+
+    // From 50,000 Wh to 200,000 Wh (150,000 Wh) on 350 kW charger
+    ChargingSession megaSession =
+        new ChargingSession(
+            "S-MEGA",
+            heavyCab.id(),
+            megaHub.id(),
+            megaCharger.id(),
+            t0.plusSeconds(3600),
+            t0.plusSeconds(5143),
+            50_000L,
+            200_000L,
+            15_000_000L);
+
+    FleetPlan plan =
+        new FleetPlan(
+            "P-MEGA",
+            tenant.value(),
+            t0,
+            t0.plusSeconds(172800),
+            List.of(new VehicleSchedule(heavyCab, depot, 250_000L, t0, List.of(megaSession))),
+            List.of(),
+            1L,
+            "h");
+
+    ValidationReport report = new PlanValidator().validate(input, plan);
+    assertThat(report.violationsFor(RuleId.VALIDATOR_INTERNAL_ERROR)).isEmpty();
+  }
 }
