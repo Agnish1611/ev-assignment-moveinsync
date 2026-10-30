@@ -10,8 +10,8 @@
 ## Timing & Latency
 - **Warmup Iterations:** 5
 - **Benchmark Iterations:** 20
-- **Latency p50:** 3.479 ms
-- **Latency p99:** 4.832 ms
+- **Latency p50:** 3.290 ms
+- **Latency p99:** 5.113 ms
 
 ## Hardware & Environment
 - **OS:** macOS Darwin (arm64)
