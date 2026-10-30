@@ -26,3 +26,7 @@ Decisions not covered in `docs/ARCHITECTURE.md` are recorded here (one line: dec
 | 2026-10-30 | D10: Charging horizon containment | All activities and charging sessions must be fully contained within the plan horizon `[horizonStart, horizonEnd]` |
 | 2026-10-30 | D11: Consumption rounding order | Base distance energy rounded UP to Wh, then traffic basis points applied and rounded UP, then AC basis points applied and rounded UP |
 | 2026-10-30 | D12: Outward slot quantisation vs continuous validation | Planners may quantise to 60s discrete grid rounding outwards; independent validator evaluates exact continuous epoch seconds |
+| 2026-10-30 | D13: Hierarchical objective tuple ordering | Lexicographic priority: (1) unassigned trips, (2) total energy & operational cost |
+| 2026-10-30 | D14: Planning robustness margin separation | Planner uses conservative 17-18% effective battery floor; validator strictly enforces the true 15% physical floor |
+| 2026-10-30 | D15: Segmented charging power model | Two-segment charging curve: fast rate (100% plug power) up to 80% capacity, stepped-down rate (50% power) above 80% |
+| 2026-10-30 | D16: Strict ground truth vs lenient candidate plan model | Ground-truth types in ValidationInput (Vehicle, Trip, Hub, Charger, TariffWindows) strictly validate invariants and fail fast on invalid parameters; candidate types (FleetPlan, VehicleSchedule, TripAssignment, ChargingSession) remain lenient so PlanValidator can inspect flawed plans and return diagnostic reports without throwing constructor exceptions |

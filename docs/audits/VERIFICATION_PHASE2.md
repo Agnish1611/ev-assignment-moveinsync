@@ -129,7 +129,7 @@ Enforced by 11 unit tests in `com.moveinsync.ev.validator.ClampingAndSocBoundsTe
 
 ## 4. Audit Finding Mapping Matrix
 
-Complete mapping from all findings (`F-01` through `F-18`) to their remediating commits and automated test methods is documented in [`docs/audits/FINDING_MAP.md`](file:///Users/agnish/projects/ev-assignment/docs/audits/FINDING_MAP.md).
+Complete mapping from all findings (`F-01` through `F-18`) to their remediating commits and automated test methods is documented in [`docs/audits/FINDING_MAP.md`](FINDING_MAP.md).
 
 ### Summary Mapping Table
 
@@ -227,7 +227,7 @@ Complete mapping from all findings (`F-01` through `F-18`) to their remediating 
 
 ## 6. Decisions and Domain Conventions (D7 through D12)
 
-The following domain conventions were formally recorded in [`docs/DECISIONS.md`](file:///Users/agnish/projects/ev-assignment/docs/DECISIONS.md) and backed by automated tests:
+The following domain conventions were formally recorded in [`docs/DECISIONS.md`](../DECISIONS.md) and backed by automated tests:
 
 1. **D7: Battery Floor is Inclusive (`SoC >= floorWh`)**
    - Exact mathematical 15% SoC is valid.
@@ -478,3 +478,203 @@ Following the full test additions, the coverage metrics verified on `fix/phase2-
 | `ev-service` | **100.00%** (3 / 3) | **100.00%** (0 / 0) | **100.00%** (8 / 8) | >= 75% Line | **PASSED** |
 
 All quality gates are firmly satisfied.
+
+---
+
+## 12. Verification and Audit Closure (Remediation Complete)
+
+### 12.1 Merge Blockers Verification (Part A)
+
+#### A.1: Validate Signatures and Public API Audit
+Running `grep -rn "validate(" --include="*.java" .` confirms that **only one single public `validate` method exists** across the entire codebase:
+- `com.moveinsync.ev.validator.PlanValidator#validate(ValidationInput input, FleetPlan candidate)`: Returns `ValidationReport`.
+- All other `validate(` methods are package-private internal engine helpers (`AssignmentValidator`, `BatteryFloorValidator`, `ChargerCapacityValidator`, `ChargingCurveValidator`, `ReserveToHubValidator`, `TariffCostValidator`, `TripTimingValidator`). Zero overloaded shims or legacy signatures exist.
+- `git diff --stat main..HEAD -- ev-domain/src/test ev-validator/src/test ev-service ev-sim ev-planner-core`:
+  Only one pre-existing test was modified: `ChargingCurveTest.java` (6 lines changed, adding exact hand-calculated assertions `1,440s` fast and `720s` slow).
+- Pre-existing tests compile cleanly because `TenantId` offers factory defaults (`TenantId.of(...)`), while entity constructors and factories preserve standard parameter signatures.
+
+#### A.2: Decisions Log Verbatim & Decision D16 Explanation
+The decisions recorded in `docs/DECISIONS.md` include:
+```markdown
+| Date | Decision | Rationale |
+|---|---|---|
+| 2026-10-30 | D1: Trust model via independent ValidationInput ground truth | Validator must never trust candidate claims for capacities, distances, tariffs, power, or charger counts |
+| 2026-10-30 | D2: Recompute and strictly verify SoC claims (CLAIMED_SOC_MISMATCH) | Energy conservation requires exact integer Wh matching between candidate claims and recomputed timeline |
+| 2026-10-30 | D3: Tenancy enforcement on all domain entities (TENANT_MISMATCH) | Prevents cross-tenant entity leakage across vehicles, trips, hubs, chargers, and unassigned trips |
+| 2026-10-30 | D4: Charger availability, outage windows, and plug double-booking checks | Enforces physical charger status, half-open outage intervals, and single-session-per-plug invariant |
+| 2026-10-30 | D5: Totality guard in PlanValidator failing closed (VALIDATOR_INTERNAL_ERROR) | Validator must never crash caller on unexpected runtime exceptions; fails closed with invalid report |
+| 2026-10-30 | D6: Deterministic violation ordering and deduplication | Comparator sorts by rule, vehicle, trip, hub, time, message to guarantee identical outputs across permutations |
+| 2026-10-30 | D7: Battery floor is inclusive (SoC >= floorWh) | Exactly 15% (e.g. 7,501 Wh on 50,001 Wh battery) is VALID; shaving 1 Wh (7,500 Wh) is strictly INVALID (H1) |
+| 2026-10-30 | D8: Deadhead factor application | Traffic basis points and AC factors apply to deadhead travel identically to loaded trip segments |
+| 2026-10-30 | D9: Idle power dissipation convention | Default 0 W; represented as non-negative integer Watts dissipated continuously during stationary idle gaps |
+| 2026-10-30 | D10: Charging horizon containment | All activities and charging sessions must be fully contained within the plan horizon [horizonStart, horizonEnd] |
+| 2026-10-30 | D11: Consumption rounding order | Base distance energy rounded UP to Wh, then traffic basis points applied and rounded UP, then AC basis points applied and rounded UP |
+| 2026-10-30 | D12: Outward slot quantisation vs continuous validation | Planners may quantise to 60s discrete grid rounding outwards; independent validator evaluates exact continuous epoch seconds |
+| 2026-10-30 | D13: Hierarchical objective tuple ordering | Lexicographic priority: (1) unassigned trips, (2) total energy & operational cost |
+| 2026-10-30 | D14: Planning robustness margin separation | Planner uses conservative 17-18% effective battery floor; validator strictly enforces the true 15% physical floor |
+| 2026-10-30 | D15: Segmented charging power model | Two-segment charging curve: fast rate (100% plug power) up to 80% capacity, stepped-down rate (50% power) above 80% |
+| 2026-10-30 | D16: Strict ground truth vs lenient candidate plan model | Ground-truth types in ValidationInput strictly validate invariants and fail fast; candidate types remain lenient so PlanValidator can inspect flawed plans and return diagnostic reports without throwing |
+```
+- **Explanation of D16:** Ground-truth types ingested by `ValidationInput` (e.g. `Vehicle`, `Trip`, `Hub`, `Charger`, `UtcTariffWindow`) represent real-world physical and organizational constraints. If a client constructs an invalid input (e.g., negative battery capacity, initial SoC > capacity, negative idle power, orphan charger, or overlapping tariffs for the same hub), `ValidationInput.Builder` fails fast with `IllegalArgumentException`. In contrast, candidate plan models (`FleetPlan`, `VehicleSchedule`, `TripAssignment`, `ChargingSession`) represent untrusted solver outputs. If a candidate schedule has negative claimed arrival SoC, inverted start/end times, or out-of-order activities, candidate domain constructors do not throw; `PlanValidator` inspects the plan and reports violations (`CLAIMED_SOC_MISMATCH`, `H6_CHARGING_CURVE`, etc.) cleanly. This is proven by `StrictValidationInputAndLenientCandidateTest`.
+
+#### A.3: Raw JaCoCo CSV Reconciled Metrics
+The raw `jacoco.csv` totals are:
+- **At commit `6bc2d27`:**
+  - `ev-validator`: Instruction: covered = 3,542, missed = 294 (Total: 3,836, **92.34%**); Line: covered = 750, missed = 62 (Total: 812, **92.37%**).
+  - The discrepancy in the earlier report occurred because Section 1 reported the instruction coverage ratio (92.34%) whereas Section 2 reported the line coverage ratio (92.37%).
+- **At HEAD (`fix/phase2-remediation`):**
+  - `ev-domain`:
+    - INSTRUCTION: covered = 2,475, missed = 224 (Total: 2,699, **91.70%**)
+    - BRANCH: covered = 199, missed = 33 (Total: 232, **85.78%** - exceeds 80% gate)
+    - LINE: covered = 516, missed = 44 (Total: 560, **92.14%** - exceeds 90% gate)
+    - COMPLEXITY: covered = 203, missed = 45
+    - METHOD: covered = 118, missed = 14
+  - `ev-validator`:
+    - INSTRUCTION: covered = 4,794, missed = 172 (Total: 4,966, **96.54%**)
+    - BRANCH: covered = 352, missed = 24 (Total: 376, **93.62%** - exceeds 80% gate)
+    - LINE: covered = 1,163, missed = 41 (Total: 1,204, **96.59%** - exceeds 90% gate)
+    - COMPLEXITY: covered = 332, missed = 30
+    - METHOD: covered = 167, missed = 7
+
+#### A.4: PIT Mutation Testing on `ev-validator`
+PIT mutation analysis was executed using an ad-hoc scratch profile (not committed).
+- **Mutations Generated:** 374
+- **Mutations Killed:** 311 (**83% Mutation Score**, **85% Test Strength**)
+  - Negate Conditionals: 137 / 146 killed (94%)
+  - Increments: 3 / 3 killed (100%)
+  - Math Mutator: 16 / 18 killed (89%)
+  - Null Returns: 48 / 53 killed (91%)
+  - Primitive Returns: 9 / 14 killed (64%)
+  - Void Method Calls: 36 / 44 killed (82%)
+- Boundary mutants and edge conditions were specifically targeted and killed in `ValidatorBoundaryAndMutantKillTest`:
+  - `initialSoc == floorWh` strictly valid; `initialSoc == floorWh - 1` invalid.
+  - `initialSoc == 0` and `initialSoc == capacityWh` bounds.
+  - Floor bounds range $[1, 99]$ percentage validation.
+  - Idle power draw 0 W boundary.
+  - Report cap exact boundary (`violations.size() == maxViolations` not truncated; `size > max` truncated).
+  - Out-of-order activity sorting and tariff window ordering.
+- **Check-Deletion Probe Results:**
+  - Deleting location continuity check -> caught by `H4AssignmentMutationTest` (`LOCATION_DISCONTINUITY`).
+  - Deleting transit gap check -> caught by `H4AssignmentMutationTest` (`H4_ASSIGNMENT_OVERLAP`).
+  - Deleting `ROUTE_UNAVAILABLE` check -> caught by `H3TripTimingMutationTest`.
+  - Deleting referential integrity checks (unknown vehicle/trip/hub/charger) -> caught by `H4AssignmentMutationTest` and `PlanReferentialIntegrityValidator`.
+  - Deleting per-entity tenant checks -> caught by `CostAndTenancyMutationTest` (`TENANT_MISMATCH`).
+  - Deleting idle energy check -> caught by `ChargingActivityEnergyValidator` (`CLAIMED_SOC_MISMATCH`).
+  - Deleting sub-claims inside `checkClaimedSocMatches` -> caught by `SocTripClaimMismatchValidatorTest` and `SocSessionClaimMismatchValidatorTest`.
+
+#### A.5: Scale Benchmark Relocation and Documentation
+- Performance benchmark `ValidationPerformanceBenchmarkTest` was removed from `ev-validator`.
+- Added `ValidationScaleBenchmarkTest` in `ev-bench` (300 cabs, 40 chargers, 1,500 trips, 300 charging sessions).
+- Zero wall-clock assertions exist in unit/mutation suites.
+- Committed benchmark results in `docs/reports/VALIDATION_300CAB_REPORT.md`:
+  - Iterations: 5 warmup, 20 benchmark runs.
+  - Latency p50: **2.581 ms**
+  - Latency p99: **2.909 ms**
+  - Machine specs: Apple M4 (10 cores), 16 GB Unified Memory, macOS Darwin (arm64), OpenJDK 21.0.13+9-LTS.
+
+#### A.6: Git Ancestry Proof
+- Command: `git merge-base --is-ancestor main HEAD && echo "ANCESTOR OK"`
+- Output: `ANCESTOR OK` (exit code 0).
+- Proves `fix/phase2-remediation` is a strict descendant of `main`.
+
+---
+
+### 12.2 Pre-Phase 3 Enhancements Verification (Part B)
+
+#### B.7: JaCoCo Enforcement on `ev-domain`
+- Added `jacoco-maven-plugin` execution in `ev-domain/pom.xml` enforcing 90% Line and 80% Branch coverage.
+- Verified passing with Line **92.14%** and Branch **85.78%**.
+
+#### B.8: Bidirectional Claim Verification (+1 Wh, -1 Wh, Matching Physics)
+All 4 sub-claims in `checkClaimedSocMatches` are verified with explicit named tests:
+1. **Trip Arrival SoC:**
+   - Declared matches physics: VALID (`IndependentGoldenPhysicsTest#deadheadPlusTripEnergyGoldenTest`)
+   - Declared +1 Wh: INVALID (`SocTripClaimMismatchValidatorTest#arrivalAtPickupSocPlus1WhProducesClaimedSocMismatch`)
+   - Declared -1 Wh: INVALID (`SocTripClaimMismatchValidatorTest#arrivalAtPickupSocMinus1WhProducesClaimedSocMismatch`)
+2. **Trip Departure SoC:**
+   - Declared matches physics: VALID
+   - Declared +1 Wh: INVALID (`SocTripClaimMismatchValidatorTest#departureAfterDropoffSocPlus1WhProducesClaimedSocMismatch`)
+   - Declared -1 Wh: INVALID (`SocTripClaimMismatchValidatorTest#departureAfterDropoffSocMinus1WhProducesClaimedSocMismatch`)
+3. **Session Plug / Start SoC:**
+   - Declared matches physics: VALID
+   - Declared +1 Wh: INVALID (`SocSessionClaimMismatchValidatorTest#sessionStartSocPlus1WhProducesClaimedSocMismatch`)
+   - Declared -1 Wh: INVALID (`SocSessionClaimMismatchValidatorTest#sessionStartSocMinus1WhProducesClaimedSocMismatch`)
+   - Dedicated F-03 inflation (10,000 Wh arrival, 50,000 Wh declared): INVALID (`SocSessionClaimMismatchValidatorTest#plugSocInflationSessionStartAboveArrivalProducesClaimedSocMismatch`)
+4. **Session Unplug / End SoC:**
+   - Declared matches physics: VALID
+   - Declared +1 Wh: INVALID (`SocSessionClaimMismatchValidatorTest#sessionEndSocPlus1WhProducesClaimedSocMismatch`)
+   - Declared -1 Wh: INVALID (`SocSessionClaimMismatchValidatorTest#sessionEndSocMinus1WhProducesClaimedSocMismatch`)
+
+#### B.9: Tariff, Differential, and Decision Tests (D8, D9, D10)
+- **Single and Multi-Window Crossing:** Tested in `TariffAndDifferentialGoldenTest#tariffCostAcrossWindowAndDstGoldenTest` ($10.5\text{M}$ $\mu$-units across windows; $27\text{M}$ $\mu$-units across DST fall-back day).
+- **Sub-Hour & Differential Coverage:** Tested in `TariffCostValidatorDifferentialTest#randomSessionsMatchDomainSchedule` (500 random sessions matching domain `TariffSchedule` down to single micro-unit).
+- **Altered Session Cost:** Tested in `CostAndTenancyMutationTest#mutationSessionCostAlteredByOneMicroUnit` (1 $\mu$-unit mismatch rejected with `COST_MISMATCH`).
+- **Decision D8 (Deadhead Multipliers):** Tested in `TariffAndDifferentialGoldenTest#namedDecisionD8DeadheadTrafficAndAcTest`.
+- **Decision D9 (Idle Power Draw):** Tested in `TariffAndDifferentialGoldenTest#namedDecisionD9IdlePowerDrawTest`.
+- **Decision D10 (Horizon Containment):** Tested in `TariffAndDifferentialGoldenTest#namedDecisionD10ActivityOutsideHorizonTest`.
+
+#### B.10: 10,000-Trial Fuzz Testing
+- `PlanValidatorFuzzTest#fuzzedPlansNeverThrowAndRejectMalformed` ran 10,000 trials.
+- Tested: negative initial SoC, target SoC exceeding capacity, inverted start/end SoC, phantom vehicles, forged trip pickup times.
+- Result: 100% pass rate. 0 unhandled exceptions; non-null `ValidationReport` returned for every trial; malformed plans strictly rejected.
+
+#### B.11: Multi-Violation Deduplication, Truncation & Cascade Fixture
+- `CausalCascadeAndReportCapFixtureTest`:
+  - 1 delayed trip assignment cascades into 7 distinct physical/semantic violations (`H3_TRIP_TIMING`, `H1_BATTERY_FLOOR`, `CLAIMED_SOC_MISMATCH`), all grouped by `rootCauseKey`.
+  - 12-fault / 77-violation fixture:
+    - When capped at 20: `report.violations().size() == 20`, `report.totalViolationsCount() == 77`, `report.isTruncated() == true`.
+    - When uncapped: `report.violations().size() == 77`, `report.totalViolationsCount() == 77`, `report.isTruncated() == false`.
+    - Partitioned into exactly 12 root cause clusters matching cascade fan-outs.
+
+#### B.12: Static Analysis, Secrets Scanner & Class Length Enforcement
+- **Spotless:** 0 violations.
+- **Checkstyle:** 0 violations.
+- **SpotBugs:** 0 bugs found across all 7 modules.
+- **Secret Scanner:** Added to `scripts/verify.sh` (Step 4), scans for private keys, AWS access keys, and tokens.
+- **Class Length Gate ($\le 300$ LOC):** Added automated grep in `scripts/verify.sh` Step 3k. Verified across entire repository: maximum Java source file length is **295 lines**.
+
+#### B.13: Overflow Probe Explicit Outcomes
+Tested in `ValidationOverflowProbeTest`:
+1. `Integer.MAX_VALUE` distance with normal consumption: evaluates cleanly without negative wraparound ($536,870,912\text{ Wh}$).
+2. Near-overflow base consumption ($Long.MAX\_VALUE / 10$): fails fast with `ArithmeticException` via `Math.multiplyExact`.
+3. Far-future timestamps within horizon (Year 2099): evaluates cleanly.
+4. Timestamp far outside horizon (Year 3000): explicitly rejected with `RuleId.ACTIVITY_OUTSIDE_HORIZON`, zero `VALIDATOR_INTERNAL_ERROR`.
+5. Tariff overflow: throws `ArithmeticException` and fails closed.
+6. Extreme fleet maxima ($1,000\text{ km}$ legs, $250\text{ kWh}$ battery, $350\text{ kW}$ DC fast charger): evaluates cleanly without error.
+
+#### B.14: Documentation Hygiene
+- All absolute paths (`/Users/agnish/...`) stripped from committed `docs/audits/*` files and replaced with relative links.
+- `docs/audits/FINDING_MAP.md` updated with exact class and method names.
+
+---
+
+### 12.3 Phase 3 Readiness Proposal (Updated Plan Model)
+
+The proposed design for Phase 3 (`ev-planner-core`) strictly adheres to architectural boundaries:
+
+```
+[ev-domain] (Immutable Value Objects, Interfaces)
+    ▲                   ▲
+    │                   │
+[ev-planner-core]   [ev-validator]
+(ALNS Solver)       (Ground-Truth Verifier)
+    ▲                   ▲
+    │                   │
+    └─── [ev-service] ──┘
+         (Orchestrator)
+```
+
+1. **Solver Interfaces (`ev-planner-core`):**
+   - `PlannerInput`: Ingests `ValidationInput` entities.
+   - `FleetSolver`: Defines `FleetPlan solve(PlannerInput input, SolverConfig config)`.
+   - `ReplanSolver`: Defines `FleetPlan replan(PlannerInput input, FleetPlan currentPlan, DriftEvent event, SolverConfig config)`.
+2. **ALNS Architecture:**
+   - **Destroy Operators:** `RandomTripRemoval`, `WorstCostRemoval`, `ShawRemoval` (relatedness by distance, time, and vehicle load). Respects mid-day freeze lock window $T_{\text{lock}}$ (15 minutes).
+   - **Repair Operators:** `GreedyRepair`, `RegretRepair` (Regret-2, Regret-3).
+   - **Robustness Margin:** In-solver battery floor enforced at $\ge 17\%$ to guarantee zero $H1$ floor breaches when evaluated against the validator's strict $15\%$ floor.
+3. **Physical Plug Assignment & Flow Re-Timer:**
+   - Two-phase solve: Phase 1 assigns trips and hub charging windows using continuous capacity sweeps. Phase 2 assigns physical chargers (`CHG-xx`) and resolves micro-delays using flow re-timing.
+4. **Validation Publication Gate:**
+   - `ev-service` invokes `PlanValidator.validate(validationInput, candidatePlan)` prior to committing or publishing.
+   - If invalid, candidate is rejected, metric `validator_rejections_total` is incremented, and `SafePatchOperator` keeps plan head intact with affected trips rerouted to backup.
+
