@@ -46,7 +46,7 @@ class TariffCostValidatorDifferentialTest {
 
     for (int iter = 0; iter < 500; iter++) {
       long startOffset = rng.nextInt(50000);
-      long duration = 300 + rng.nextInt(20000); // 5 min to ~5.5 hours
+      long duration = 300L + rng.nextInt(20000); // 5 min to ~5.5 hours
       Instant sStart = base.plusSeconds(startOffset);
       Instant sEnd = sStart.plusSeconds(duration);
       long energyWh = 500L + rng.nextInt(75_000); // 0.5 kWh to 75 kWh

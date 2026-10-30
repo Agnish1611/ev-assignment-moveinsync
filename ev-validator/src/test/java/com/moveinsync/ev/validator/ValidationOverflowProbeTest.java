@@ -199,7 +199,6 @@ class ValidationOverflowProbeTest {
       "Realistic fleet maxima (1,000 km legs, 250 kWh battery, 350 kW charger) produce no validator internal error")
   void realisticFleetMaximaProduceNoValidatorInternalError() {
     Location depot = Location.of("LOC-DEPOT", "Depot");
-    Location dest = Location.of("LOC-DEST", "Destination");
 
     Hub megaHub = Hub.of("tenant-overflow", "HUB-MEGA", "Mega Hub", depot, ZoneId.of("UTC"), 10);
     Charger megaCharger =
