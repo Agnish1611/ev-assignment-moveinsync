@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
+SKIPPED_STEPS=0
+
 # If local JDK 21 is present, use it
 if [ -d "${PROJECT_ROOT}/.jdk/jdk-21.0.13+9/Contents/Home" ]; then
     export JAVA_HOME="${PROJECT_ROOT}/.jdk/jdk-21.0.13+9/Contents/Home"
@@ -103,6 +105,46 @@ if [[ -n "$OVERSIZED_FILES" ]]; then
     exit 1
 fi
 
+# 3l. Test method assertion gate: every @Test and @ParameterizedTest must contain assertions
+NO_ASSERT_TESTS=$(python3 -c "
+import glob, re
+assertion_re = re.compile(r'\b(assert|assertThat|verify|fail)\b')
+test_annot_re = re.compile(r'^\s*@(Test|ParameterizedTest)\b')
+violations = []
+for f in glob.glob('*/src/test/java/**/*.java', recursive=True):
+    lines = open(f).readlines()
+    in_test = False
+    mname = ''
+    has_assert = False
+    brace_depth = 0
+    for i, line in enumerate(lines):
+        if test_annot_re.search(line):
+            in_test = True
+            has_assert = False
+            brace_depth = 0
+            for j in range(i+1, min(i+10, len(lines))):
+                m = re.search(r'\b(?:void|boolean)\s+([a-zA-Z0-9_]+)\s*\(', lines[j])
+                if m:
+                    mname = m.group(1)
+                    break
+        if in_test:
+            brace_depth += line.count('{') - line.count('}')
+            if assertion_re.search(line):
+                has_assert = True
+            if '{' in line and brace_depth <= 0:
+                if not has_assert and mname:
+                    violations.append(f'{f}#{mname}')
+                in_test = False
+                mname = ''
+if violations:
+    print('\n'.join(violations))
+")
+if [[ -n "$NO_ASSERT_TESTS" ]]; then
+    echo "ERROR: Found test methods without assertions:"
+    echo "$NO_ASSERT_TESTS"
+    exit 1
+fi
+
 echo "✓ Forbidden constructs check passed."
 
 # 4. Log, PII and Secret scanner hygiene check
@@ -123,6 +165,15 @@ echo "✓ Log, PII and Secret scanner check passed."
 # 5. Integration tests (if docker/testcontainers available)
 echo "[Step 5/6] Checking integration test environment..."
 IT_FILES=$(find . -name "*IT.java" -not -path "*/target/*" 2>/dev/null || true)
+
+# Fail in CI if integration tests exist or if Docker is unavailable in CI
+if [[ "${CI:-false}" == "true" || "${GITHUB_ACTIONS:-false}" == "true" ]]; then
+    if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+        echo "ERROR: Running in CI but Docker daemon is unreachable! Container-backed integration tests require Docker in CI."
+        exit 1
+    fi
+fi
+
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     echo "✓ Docker is running. Container-backed integration tests enabled."
     echo "✓ Integration test check passed."
@@ -133,6 +184,7 @@ else
         echo "$IT_FILES"
         exit 1
     else
+        SKIPPED_STEPS=$((SKIPPED_STEPS + 1))
         echo "[-] Integration tests [SKIPPED: No *IT.java files exist and Docker is unreachable locally; container-backed integration tests will run in CI]"
     fi
 fi
@@ -144,9 +196,14 @@ if [[ "${RELEASE_CANDIDATE:-false}" == "true" ]]; then
     ./mvnw -q test -pl ev-sim -Dtest=BenchmarkScenarioTest
     echo "✓ Release-candidate check passed."
 else
+    SKIPPED_STEPS=$((SKIPPED_STEPS + 1))
     echo "[-] Release-candidate benchmark [SKIPPED: RELEASE_CANDIDATE not set to true]"
 fi
 
 echo "================================================================"
-echo " ALL CHECKS PASSED: verify.sh completed successfully."
+if [[ "$SKIPPED_STEPS" -gt 0 ]]; then
+    echo " PASSED WITH ${SKIPPED_STEPS} SKIPPED STEPS: verify.sh completed successfully."
+else
+    echo " ALL CHECKS PASSED: verify.sh completed successfully."
+fi
 echo "================================================================"
