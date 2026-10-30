@@ -51,7 +51,12 @@ import org.junit.jupiter.api.Test;
  *   <li>Inflate target SoC by 1 Wh without duration increase
  * </ul>
  *
- * And asserts that the validator catches every single mutated violation.
+ * <p>And asserts that the validator catches every single mutated violation.
+ *
+ * <p>Class length justification (AGENTS.md 2.2): PlanValidatorMutationTest contains the complete
+ * canonical suite of 24 single-fault mutation tests covering all invariants H1-H6, energy
+ * accounting, tenant isolation, and completeness rules. Preserving all mutation tests in a single
+ * comprehensive suite ensures complete regression traceability against AUDIT_REPORT_PHASE2.md.
  */
 class PlanValidatorMutationTest {
 

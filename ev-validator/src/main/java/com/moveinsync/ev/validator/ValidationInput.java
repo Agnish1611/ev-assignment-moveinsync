@@ -31,6 +31,11 @@ import java.util.Optional;
  * truth against which candidate plans are verified. The validator never trusts physical vehicle
  * capacities, trip driving distances, charger powers, or tariff windows declared inside the
  * candidate plan.
+ *
+ * <p>Class length justification (AGENTS.md 2.2): ValidationInput is the immutable ground-truth
+ * boundary data record and builder containing all verified fleets, hubs, chargers, trips, and
+ * physical models required for zero-trust validation. Its builder requires comprehensive fluent
+ * registration methods.
  */
 public final class ValidationInput {
 

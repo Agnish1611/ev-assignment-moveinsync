@@ -31,6 +31,11 @@ import java.util.Set;
  * <p>Architectural Rule: As mandated by AGENTS.md, this validator depends strictly and solely on
  * {@code ev-domain} and standard Java libraries. It has zero coupling with {@code ev-planner-core}
  * or {@code ev-service}.
+ *
+ * <p>Class length justification (AGENTS.md 2.2): PlanValidator serves as the central independent
+ * validation entry point and orchestrator for all domain rules H1-H6, referential integrity, tenant
+ * isolation, and totality fail-safe handling. Keeping validation coordination cohesive ensures
+ * unified error aggregation and monotonic determinism.
  */
 public final class PlanValidator {
 

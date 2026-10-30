@@ -20,6 +20,11 @@ import java.util.Optional;
  * <p>Energy values claimed in candidate schedules are never trusted. The validator recomputes State
  * of Charge (SoC) independently at each step. Any discrepancy between claimed SoC and ground-truth
  * accumulation produces {@link RuleId#CLAIMED_SOC_MISMATCH}.
+ *
+ * <p>Class length justification (AGENTS.md 2.2): BatteryFloorValidator encapsulates all battery
+ * floor (H1), reserve-to-hub (H5), and charging curve / SoC bounds (H6) physical verification steps
+ * along cab route timelines, including deadhead, pickup, dropoff, and charging session milestones.
+ * Co-locating timeline energy propagation preserves cohesive numeric invariant safety.
  */
 final class BatteryFloorValidator {
 
