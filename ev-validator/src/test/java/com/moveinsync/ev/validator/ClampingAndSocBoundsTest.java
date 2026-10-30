@@ -238,6 +238,57 @@ class ClampingAndSocBoundsTest {
   }
 
   @Test
+  @DisplayName(
+      "Original F-03: Plug SoC inflation (10,000 Wh arrival / 50,000 Wh declared start) produces CLAIMED_SOC_MISMATCH")
+  void plugSocInflationSessionStartAboveArrivalProducesClaimedSocMismatch() {
+    ChargingSession inflatedSession =
+        new ChargingSession(
+            "S-INFLATED",
+            cab.id(),
+            hub.id(),
+            charger.id(),
+            t0.plusSeconds(1800),
+            t0.plusSeconds(3600),
+            50_000L,
+            55_000L,
+            500_000L);
+    VehicleSchedule sched = new VehicleSchedule(cab, hubLoc, 10_000L, t0, List.of(inflatedSession));
+    FleetPlan plan =
+        new FleetPlan(
+            "P-INFLATED-START",
+            tenant.value(),
+            t0,
+            t0.plusSeconds(14400),
+            List.of(sched),
+            List.of(),
+            1L,
+            "h");
+
+    ValidationInput inputWith10kWh =
+        ValidationInput.builder()
+            .tenantId(tenant)
+            .horizon(t0, t0.plusSeconds(86400))
+            .addHub(hub)
+            .addCharger(charger)
+            .addVehicle(cab, hubLoc, 10_000L)
+            .distanceProvider(distanceProvider)
+            .consumptionModel(new ConstantConsumptionModel())
+            .batteryFloorPercentage(15)
+            .enforceReserveToHub(false)
+            .build();
+
+    ValidationReport report = validator.validate(inputWith10kWh, plan);
+    assertThat(report.isValid()).isFalse();
+    assertThat(report.violationsFor(RuleId.CLAIMED_SOC_MISMATCH)).isNotEmpty();
+    assertThat(report.violationsFor(RuleId.CLAIMED_SOC_MISMATCH))
+        .anyMatch(
+            v ->
+                v.message()
+                    .contains(
+                        "claimed start SoC (50000 Wh) does not match arrival SoC at hub (10000 Wh)"));
+  }
+
+  @Test
   @DisplayName("Session start SoC greater than target SoC produces H6_CHARGING_CURVE")
   void sessionStartSocGreaterThanTargetSocProducesH6() {
     ChargingSession session =
