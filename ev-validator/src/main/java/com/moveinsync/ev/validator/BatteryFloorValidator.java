@@ -134,6 +134,23 @@ final class BatteryFloorValidator {
       long currentSocWh,
       List<PlanViolation> violations) {
     Trip trip = assign.trip();
+    if (!currentLocation.id().equals(trip.fromLocation().id())
+        && context
+            .distanceProvider()
+            .findDistanceAndDuration(currentLocation, trip.fromLocation())
+            .isEmpty()) {
+      violations.add(
+          PlanViolation.ofTrip(
+              RuleId.ROUTE_UNAVAILABLE,
+              trip.id(),
+              vehicle.id(),
+              assign.pickupTime(),
+              "No route available from "
+                  + currentLocation.id()
+                  + " to "
+                  + trip.fromLocation().id()));
+    }
+
     long deadheadEnergy =
         calculateDeadheadEnergy(currentLocation, trip.fromLocation(), vehicle, assign.pickupTime());
     long arrivalSocWh = currentSocWh - deadheadEnergy;
@@ -238,10 +255,25 @@ final class BatteryFloorValidator {
                   + " Wh)"));
     }
 
-    if (session.targetSocWh() > vehicle.batteryCapacityWh()) {
+    if (session.startSocWh() < 0 || session.startSocWh() > vehicle.batteryCapacityWh()) {
       violations.add(
           PlanViolation.ofVehicle(
-              RuleId.H1_BATTERY_FLOOR,
+              RuleId.SOC_OUT_OF_RANGE,
+              vehicle.id(),
+              session.startTime(),
+              "Vehicle "
+                  + vehicle.id()
+                  + " session start SoC ("
+                  + session.startSocWh()
+                  + " Wh) is out of bounds [0, "
+                  + vehicle.batteryCapacityWh()
+                  + " Wh]"));
+    }
+
+    if (session.targetSocWh() < 0 || session.targetSocWh() > vehicle.batteryCapacityWh()) {
+      violations.add(
+          PlanViolation.ofVehicle(
+              RuleId.SOC_OUT_OF_RANGE,
               vehicle.id(),
               session.endTime(),
               "Vehicle "
@@ -256,11 +288,12 @@ final class BatteryFloorValidator {
     Optional<Charger> chargerOpt = context.findCharger(session.chargerId());
     int chargerPowerKw = chargerOpt.map(Charger::powerKw).orElse(vehicle.maxChargeKw());
     int effectivePowerKw = Math.min(chargerPowerKw, vehicle.maxChargeKw());
+    long safeStartSoc = Math.max(0L, Math.min(arrivalAtHubSoc, vehicle.batteryCapacityWh()));
     long maxCurveSoc =
         context
             .chargingCurve()
             .calculateTargetSocWh(
-                arrivalAtHubSoc,
+                safeStartSoc,
                 session.durationSeconds(),
                 vehicle.batteryCapacityWh(),
                 effectivePowerKw);
@@ -296,11 +329,24 @@ final class BatteryFloorValidator {
       return currentSocWh;
     }
 
-    int dist =
-        context
-            .distanceProvider()
-            .getDistanceAndDuration(currentLocation, hubLocation)
-            .distanceMeters();
+    var ddOpt = context.distanceProvider().findDistanceAndDuration(currentLocation, hubLocation);
+    if (ddOpt.isEmpty()) {
+      violations.add(
+          PlanViolation.ofVehicle(
+              RuleId.ROUTE_UNAVAILABLE,
+              vehicle.id(),
+              session.startTime(),
+              "No route available from "
+                  + currentLocation.id()
+                  + " to hub "
+                  + hub.id()
+                  + " ("
+                  + hubLocation.id()
+                  + ")"));
+      return currentSocWh;
+    }
+
+    int dist = ddOpt.get().distanceMeters();
     long deadheadEnergy =
         context
             .consumptionModel()
@@ -331,7 +377,14 @@ final class BatteryFloorValidator {
     if (from.id().equals(to.id())) {
       return 0L;
     }
-    int dist = context.distanceProvider().getDistanceAndDuration(from, to).distanceMeters();
-    return context.consumptionModel().calculateEnergyWh(vehicle, dist, startTime, context.acOn());
+    return context
+        .distanceProvider()
+        .findDistanceAndDuration(from, to)
+        .map(
+            dd ->
+                context
+                    .consumptionModel()
+                    .calculateEnergyWh(vehicle, dd.distanceMeters(), startTime, context.acOn()))
+        .orElse(0L);
   }
 }

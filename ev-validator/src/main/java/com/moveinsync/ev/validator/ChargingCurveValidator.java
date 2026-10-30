@@ -43,6 +43,38 @@ final class ChargingCurveValidator {
     int chargerPowerKw = chargerOpt.map(Charger::powerKw).orElse(vehicle.maxChargeKw());
     int effectivePowerKw = Math.min(chargerPowerKw, vehicle.maxChargeKw());
 
+    if (session.startSocWh() < 0 || session.startSocWh() > vehicle.batteryCapacityWh()) {
+      violations.add(
+          PlanViolation.ofVehicle(
+              RuleId.SOC_OUT_OF_RANGE,
+              vehicle.id(),
+              session.startTime(),
+              "Charging session "
+                  + session.sessionId()
+                  + " start SoC ("
+                  + session.startSocWh()
+                  + " Wh) is out of bounds [0, "
+                  + vehicle.batteryCapacityWh()
+                  + " Wh]"));
+      return;
+    }
+
+    if (session.targetSocWh() < 0 || session.targetSocWh() > vehicle.batteryCapacityWh()) {
+      violations.add(
+          PlanViolation.ofVehicle(
+              RuleId.SOC_OUT_OF_RANGE,
+              vehicle.id(),
+              session.endTime(),
+              "Charging session "
+                  + session.sessionId()
+                  + " target SoC ("
+                  + session.targetSocWh()
+                  + " Wh) is out of bounds [0, "
+                  + vehicle.batteryCapacityWh()
+                  + " Wh]"));
+      return;
+    }
+
     if (session.startSocWh() > session.targetSocWh()) {
       violations.add(
           PlanViolation.ofVehicle(

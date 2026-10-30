@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /** Pre-computed distance matrix implementation of {@link DistanceProvider}. */
 public final class MatrixDistanceProvider implements DistanceProvider {
@@ -33,24 +34,32 @@ public final class MatrixDistanceProvider implements DistanceProvider {
 
   @Override
   public DistanceDuration getDistanceAndDuration(Location from, Location to) {
+    return findDistanceAndDuration(from, to)
+        .orElseThrow(
+            () ->
+                new IllegalArgumentException(
+                    "No distance entry for route from " + from.id() + " to " + to.id()));
+  }
+
+  @Override
+  public Optional<DistanceDuration> findDistanceAndDuration(Location from, Location to) {
     Objects.requireNonNull(from, "from location must not be null");
     Objects.requireNonNull(to, "to location must not be null");
 
     if (from.id().equals(to.id())) {
-      return DistanceDuration.zero();
+      return Optional.of(DistanceDuration.zero());
     }
 
     LocationPair pair = new LocationPair(from.id(), to.id());
     DistanceDuration direct = matrix.get(pair);
     if (direct != null) {
-      return direct;
+      return Optional.of(direct);
     }
 
     if (fallbackProvider != null) {
-      return fallbackProvider.getDistanceAndDuration(from, to);
+      return fallbackProvider.findDistanceAndDuration(from, to);
     }
 
-    throw new IllegalArgumentException(
-        "No distance entry for route from " + from.id() + " to " + to.id());
+    return Optional.empty();
   }
 }

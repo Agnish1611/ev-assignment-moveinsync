@@ -115,8 +115,20 @@ final class AssignmentValidator {
     Location startLoc = resolveStartLocation(next);
 
     if (endLoc != null && startLoc != null && !endLoc.id().equals(startLoc.id())) {
-      int transitDuration =
-          context.distanceProvider().getDistanceAndDuration(endLoc, startLoc).durationSeconds();
+      var ddOpt = context.distanceProvider().findDistanceAndDuration(endLoc, startLoc);
+      if (ddOpt.isEmpty()) {
+        violations.add(
+            PlanViolation.ofVehicle(
+                RuleId.ROUTE_UNAVAILABLE,
+                vehicleId,
+                next.activityStartTime(),
+                "No transit corridor route available between "
+                    + endLoc.id()
+                    + " and "
+                    + startLoc.id()));
+        return;
+      }
+      int transitDuration = ddOpt.get().durationSeconds();
       long gapSeconds =
           Duration.between(curr.activityEndTime(), next.activityStartTime()).getSeconds();
 

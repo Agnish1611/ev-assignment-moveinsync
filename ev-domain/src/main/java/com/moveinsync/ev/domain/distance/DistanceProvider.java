@@ -1,6 +1,7 @@
 package com.moveinsync.ev.domain.distance;
 
 import com.moveinsync.ev.domain.location.Location;
+import java.util.Optional;
 
 /**
  * Polymorphic provider interface for distance and duration lookups between locations.
@@ -17,4 +18,19 @@ public interface DistanceProvider {
    * @return distance in metres and duration in seconds
    */
   DistanceDuration getDistanceAndDuration(Location from, Location to);
+
+  /**
+   * Resolves the optional travel distance and nominal duration between two locations.
+   *
+   * @param from origin location
+   * @param to destination location
+   * @return Optional containing distance and duration, or empty if no route exists
+   */
+  default Optional<DistanceDuration> findDistanceAndDuration(Location from, Location to) {
+    try {
+      return Optional.ofNullable(getDistanceAndDuration(from, to));
+    } catch (RuntimeException ex) {
+      return Optional.empty();
+    }
+  }
 }

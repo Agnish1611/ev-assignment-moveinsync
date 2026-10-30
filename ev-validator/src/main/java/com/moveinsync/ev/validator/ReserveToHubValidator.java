@@ -56,11 +56,12 @@ final class ReserveToHubValidator {
     boolean canReachAtLeastOneHub = false;
 
     for (Hub hub : context.hubs().values()) {
-      int distMeters =
-          context
-              .distanceProvider()
-              .getDistanceAndDuration(dropoffLocation, hub.location())
-              .distanceMeters();
+      var ddOpt =
+          context.distanceProvider().findDistanceAndDuration(dropoffLocation, hub.location());
+      if (ddOpt.isEmpty()) {
+        continue;
+      }
+      int distMeters = ddOpt.get().distanceMeters();
       long energyToHub =
           context
               .consumptionModel()
