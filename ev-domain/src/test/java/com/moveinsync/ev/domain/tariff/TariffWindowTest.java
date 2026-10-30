@@ -168,5 +168,32 @@ class TariffWindowTest {
         .isInstanceOf(NullPointerException.class);
     assertThatThrownBy(() -> new TariffWindow(hubId, LocalTime.NOON, LocalTime.MIDNIGHT, -1L))
         .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new TariffWindow(hubId, null, LocalTime.MIDNIGHT, 100L))
+        .isInstanceOf(NullPointerException.class);
+    assertThatThrownBy(() -> new TariffWindow(hubId, LocalTime.NOON, null, 100L))
+        .isInstanceOf(NullPointerException.class);
+
+    TariffWindow fullDay = new TariffWindow(hubId, LocalTime.MIDNIGHT, LocalTime.MIDNIGHT, 100L);
+    UtcTariffWindow fullUtc = fullDay.toUtcWindow(LocalDate.of(2026, 10, 30), ZoneId.of("UTC"));
+    assertThat(fullUtc.durationSeconds()).isEqualTo(86400L);
+
+    assertThatThrownBy(
+            () ->
+                fullDay.toUtcWindows(
+                    LocalDate.of(2026, 10, 30), LocalDate.of(2026, 10, 20), ZoneId.of("UTC")))
+        .isInstanceOf(IllegalArgumentException.class);
+
+    // UtcTariffWindow validations
+    Instant t0 = Instant.parse("2026-10-30T00:00:00Z");
+    Instant t1 = Instant.parse("2026-10-30T01:00:00Z");
+    assertThatThrownBy(() -> new UtcTariffWindow(hubId, t1, t0, 100L))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new UtcTariffWindow(hubId, t0, t1, -1L))
+        .isInstanceOf(IllegalArgumentException.class);
+
+    UtcTariffWindow freeWin = new UtcTariffWindow(hubId, t0, t1, 0L);
+    assertThat(freeWin.calculateCostMicros(5000L)).isZero();
+    assertThatThrownBy(() -> freeWin.calculateCostMicros(-10L))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 }

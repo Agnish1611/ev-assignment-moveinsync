@@ -118,5 +118,19 @@ class ChargingCurveTest {
     // Zero or negative power
     assertThatThrownBy(() -> curve.calculateDurationSeconds(10_000L, 20_000L, capacityWh, 0))
         .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> curve.calculateDurationSeconds(10_000L, 20_000L, 0L, 50))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  @DisplayName("Charging starting above 80% uses slow segment directly")
+  void chargingStartingAbove80Percent() {
+    // 42,000 Wh to 45,000 Wh (3,000 Wh) @ 25 kW slow rate = 3000 * 3600 / 25,000 = 432 seconds
+    long duration = curve.calculateDurationSeconds(42_000L, 45_000L, capacityWh, plugPower50Kw);
+    assertThat(duration).isEqualTo(432L);
+
+    // Target SoC starting above threshold
+    long targetSoc = curve.calculateTargetSocWh(42_000L, 432L, capacityWh, plugPower50Kw);
+    assertThat(targetSoc).isEqualTo(45_000L);
   }
 }
