@@ -199,6 +199,10 @@ class ValidationScaleBenchmarkTest {
               : java.nio.file.Path.of("..", "docs");
       java.nio.file.Path reportPath =
           rootDocs.resolve("reports").resolve("VALIDATION_300CAB_REPORT.md");
+      if (java.nio.file.Files.exists(reportPath)
+          && !"true".equalsIgnoreCase(System.getenv("RELEASE_CANDIDATE"))) {
+        return;
+      }
       java.nio.file.Files.createDirectories(reportPath.getParent());
       String content =
           "# 300-Cab Scenario Validation Benchmark Report\n\n"
