@@ -1,4 +1,30 @@
-version: '3.8'
+# Dev-only passwords. Production replaces them.
+# The broker uses replication factor 1. Production is 3 with min.insync.replicas=2.
+# ev_admin owns the schema. The application connects as ev_api, which is not a superuser.
+
+x-app-environment: &app-environment
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ev_fleet
+  SPRING_DATASOURCE_USERNAME: ev_api
+  SPRING_DATASOURCE_PASSWORD: ev_password
+  EV_SCHEMA_MIGRATE: "true"
+  EV_SCHEMA_ADMIN_USER: ev_admin
+  EV_SCHEMA_ADMIN_PASSWORD: ev_password
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/ev/protocol/openid-connect/certs
+  EV_BUS_BOOTSTRAP: kafka:9092
+  EV_SCHEMA_REGISTRY: http://schema-registry:8081
+  EV_BUS_RELAY_MILLIS: "1000"
+
+x-app-depends: &app-depends
+  postgres:
+    condition: service_healthy
+  kafka:
+    condition: service_healthy
+  schema-registry:
+    condition: service_healthy
+  keycloak:
+    condition: service_healthy
+  keycloak-setup:
+    condition: service_completed_successfully
 
 services:
   postgres:
@@ -9,14 +35,191 @@ services:
       POSTGRES_USER: ev_admin
       POSTGRES_PASSWORD: ev_password
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ev_admin -d ev_fleet"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
+
+  kafka:
+    image: apache/kafka:3.8.0
+    hostname: kafka
+    container_name: ev-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.7.1
+    container_name: ev-schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "8085:8081"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    container_name: ev-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8180:8080"
+    volumes:
+      - ./deploy/keycloak/ev-realm.json:/opt/keycloak/data/import/ev-realm.json:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000 && printf \"GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3 && grep -q UP <&3'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # Direct grant refuses a user until the profile is satisfied. These accounts have no email or name.
+  keycloak-setup:
+    image: curlimages/curl:8.11.0
+    container_name: ev-keycloak-setup
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      KC_ADMIN: admin
+      KC_ADMIN_PASSWORD: admin
+    volumes:
+      - ./deploy/keycloak/user-profile.json:/profile.json:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        i=0
+        while [ "$$i" -lt 30 ]; do
+          if curl -sf -o /tmp/token -X POST http://keycloak:8080/realms/master/protocol/openid-connect/token \
+            -d "client_id=admin-cli" -d "username=$$KC_ADMIN" -d "password=$$KC_ADMIN_PASSWORD" -d "grant_type=password"; then
+            break
+          fi
+          i=$$((i + 1))
+          sleep 2
+        done
+        token=$$(sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' /tmp/token)
+        test -n "$$token"
+        curl -sf -X PUT http://keycloak:8080/admin/realms/ev/users/profile \
+          -H "Authorization: Bearer $$token" \
+          -H "Content-Type: application/json" \
+          --data-binary @/profile.json
+    restart: "no"
+
+  app-1:
+    image: ev-fleet:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ev-app-1
+    environment:
+      <<: *app-environment
+      EV_BUS_GROUP: ev-web-1
+    ports:
+      - "8080:8080"
+    depends_on: *app-depends
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
+
+  app-2:
+    image: ev-fleet:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ev-app-2
+    environment:
+      <<: *app-environment
+      EV_BUS_GROUP: ev-web-2
+    ports:
+      - "8081:8080"
+    depends_on: *app-depends
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: ev-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      app-1:
+        condition: service_healthy
+      app-2:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: ev-grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./deploy/observability/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./deploy/observability/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./deploy/observability/ev-fleet.json:/var/lib/grafana/dashboards/ev-fleet.json:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
 
 volumes:
   postgres_data:

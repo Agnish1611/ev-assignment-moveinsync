@@ -1,0 +1,9 @@
+.git
+.github
+.jdk
+.idea
+.cursor
+**/target
+docs
+deploy
+*.md

@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: ev-fleet
+    orgId: 1
+    folder: EV
+    type: file
+    disableDeletion: true
+    options:
+      path: /var/lib/grafana/dashboards

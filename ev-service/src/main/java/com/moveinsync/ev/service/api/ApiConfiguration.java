@@ -8,6 +8,7 @@ import com.moveinsync.ev.service.cache.CacheSettings;
 import com.moveinsync.ev.service.cache.PlanCaches;
 import com.moveinsync.ev.service.cache.PlanReadCache;
 import com.moveinsync.ev.service.observe.ServiceMeters;
+import com.moveinsync.ev.service.plan.SchemaMigrator;
 import com.moveinsync.ev.service.repository.CatalogRepository;
 import com.moveinsync.ev.service.repository.IdempotencyRepository;
 import com.moveinsync.ev.service.repository.JobRepository;
@@ -17,12 +18,12 @@ import java.time.Clock;
 import javax.sql.DataSource;
 import org.postgresql.ds.PGSimpleDataSource;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 /** Wires the HTTP API. A process without a web server does not create these beans. */
 @Configuration
@@ -31,10 +32,16 @@ import org.springframework.context.annotation.Configuration;
 public class ApiConfiguration {
 
   @Bean
-  DataSource dataSource(
-      @Value("${spring.datasource.url}") String url,
-      @Value("${spring.datasource.username}") String username,
-      @Value("${spring.datasource.password}") String password) {
+  DataSource dataSource(Environment environment) {
+    String url = environment.getRequiredProperty("spring.datasource.url");
+    String username = environment.getRequiredProperty("spring.datasource.username");
+    String password = environment.getRequiredProperty("spring.datasource.password");
+    if (environment.getProperty("ev.schema.migrate", Boolean.class, Boolean.FALSE)) {
+      SchemaMigrator.migrate(
+          url,
+          environment.getRequiredProperty("ev.schema.admin-user"),
+          environment.getRequiredProperty("ev.schema.admin-password"));
+    }
     PGSimpleDataSource source = new PGSimpleDataSource();
     source.setURL(url);
     source.setUser(username);
@@ -43,7 +50,7 @@ public class ApiConfiguration {
   }
 
   @Bean
-  @ConditionalOnMissingBean(MessageBus.class)
+  @ConditionalOnProperty(name = "ev.bus.bootstrap", havingValue = "false", matchIfMissing = true)
   MessageBus messageBus() {
     return new MemoryMessageBus();
   }

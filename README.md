@@ -2,6 +2,28 @@
 
 Production-grade EV fleet charging and trip assignment optimization platform for MoveInSync Case Study 6 (Advanced Track).
 
+## Run
+
+```bash
+docker compose up --build
+```
+
+That starts two application instances, Postgres, Kafka in KRaft mode, Schema Registry, Keycloak, Prometheus, and Grafana. Passwords in `docker-compose.yml` and the Keycloak realm are dev-only. The application connects as `ev_api`, which is not a superuser. Flyway runs as `ev_admin` before that connection opens.
+
+The compose broker uses replication factor 1. Production is replication factor 3 with `min.insync.replicas=2`.
+
+| Port | What |
+|---|---|
+| 8080 | First application instance |
+| 8081 | Second application instance |
+| 8180 | Keycloak realm `ev` |
+| 8085 | Schema Registry |
+| 3001 | Grafana, user `admin`, password `admin`. Anonymous viewers can open the dashboard |
+| 9090 | Prometheus |
+| 5433 | Postgres, migration user `ev_admin`, application user `ev_api`, password `ev_password` |
+
+Keycloak users `operator`, `employee`, `admin`, and `device` each use that same word as the password. All four are in tenant `tenant-a`. The client is `ev-api`. A walkthrough is [docs/DEMO.md](docs/DEMO.md). The design note is [docs/DESIGN_NOTE.md](docs/DESIGN_NOTE.md). A Postman collection is `deploy/postman/ev-fleet.postman_collection.json`.
+
 ## Architecture & Modules
 
 The platform is designed in strict accordance with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md):
@@ -53,6 +75,14 @@ The physical charging profile is governed by a deterministic two-segment piecewi
    - Charging session durations round **UP** to avoid underestimating charger plug occupancy.
    - Energy delivery rounds **DOWN** to avoid overestimating vehicle battery SoC.
    - Energy conservation strictly verified: claimed session target SoC must match curve delivery for the elapsed duration (`RuleId.CLAIMED_SOC_MISMATCH`).
+
+## Trade-offs
+
+Plan writes prefer consistency. A version becomes the head only after the independent validator accepts it, and only if the compare-and-set still sees the expected version. A failed write leaves the previous head. Reads stay available from the cache for the lifetimes in decision D30.
+
+Re-plans prefer a short deadline and a stable assignment over a better objective. The ladder stops when the clock reaches the deadline and keeps the last validator-clean plan. The objective is fewer backup trips first, then the change penalty times changed assignments, plus charging cost.
+
+[docs/DESIGN_NOTE.md](docs/DESIGN_NOTE.md) records what this build leaves out, including the live failover of one web instance and the fact that those instances do not run the solver.
 
 ## Verification Gate
 

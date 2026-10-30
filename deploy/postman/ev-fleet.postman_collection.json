@@ -1,0 +1,105 @@
+{
+  "info": {
+    "name": "EV Fleet",
+    "description": "Dev-only calls for docker compose. Passwords match docker-compose.yml and the Keycloak realm.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "tokenUrl", "value": "http://localhost:8180/realms/ev/protocol/openid-connect/token"},
+    {"key": "app1", "value": "http://localhost:8080"},
+    {"key": "app2", "value": "http://localhost:8081"},
+    {"key": "token", "value": ""}
+  ],
+  "item": [
+    {
+      "name": "Admin token",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var body = pm.response.json();",
+              "pm.collectionVariables.set('token', body.access_token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/x-www-form-urlencoded"}],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {"key": "grant_type", "value": "password"},
+            {"key": "client_id", "value": "ev-api"},
+            {"key": "username", "value": "admin"},
+            {"key": "password", "value": "admin"}
+          ]
+        },
+        "url": "{{tokenUrl}}"
+      }
+    },
+    {
+      "name": "Health app-1",
+      "request": {"method": "GET", "url": "{{app1}}/actuator/health"}
+    },
+    {
+      "name": "Health app-2",
+      "request": {"method": "GET", "url": "{{app2}}/actuator/health"}
+    },
+    {
+      "name": "Create hub",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{token}}"},
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Idempotency-Key", "value": "hub-demo-1"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"hubId\":\"HUB-1\",\"name\":\"Central\",\"locationId\":\"LOC-1\",\"zone\":\"Asia/Kolkata\",\"chargerCount\":4}"
+        },
+        "url": "{{app1}}/v1/admin/hubs"
+      }
+    },
+    {
+      "name": "Accept plan job",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{token}}"},
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Idempotency-Key", "value": "job-demo-1"}
+        ],
+        "body": {"mode": "raw", "raw": "{\"shard\":\"shard-demo\"}"},
+        "url": "{{app1}}/v1/plans"
+      }
+    },
+    {
+      "name": "Current plan",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+        "url": "{{app1}}/v1/plans/current?shard=shard-demo"
+      }
+    },
+    {
+      "name": "Battery reading",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{token}}"},
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Idempotency-Key", "value": "battery-demo-1"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"cabId\":\"CAB-1\",\"socWh\":24600,\"observedAt\":\"2026-10-30T09:00:00Z\",\"sequence\":1}"
+        },
+        "url": "{{app1}}/v1/events/battery"
+      }
+    }
+  ]
+}
