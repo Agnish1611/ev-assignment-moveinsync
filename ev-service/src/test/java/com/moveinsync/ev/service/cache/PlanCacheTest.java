@@ -73,6 +73,24 @@ class PlanCacheTest {
   }
 
   @Test
+  void aCachedReadDoesNotOpenTheStore() {
+    PlanCaches caches =
+        new PlanCaches(new CacheSettings(4, 4, 4, 4, 2, 60, 24), new ManualTicker());
+    AtomicInteger loads = new AtomicInteger();
+
+    assertThat(caches.current("tenant-a", "shard", () -> load(loads, 7L))).isEqualTo(7L);
+    assertThat(
+            caches.current(
+                "tenant-a",
+                "shard",
+                () -> {
+                  throw new IllegalStateException("db down");
+                }))
+        .isEqualTo(7L);
+    assertThat(loads).hasValue(1);
+  }
+
+  @Test
   void aFailedLoadIsNotCached() {
     PlanCaches caches =
         new PlanCaches(new CacheSettings(4, 4, 4, 4, 2, 60, 24), new ManualTicker());

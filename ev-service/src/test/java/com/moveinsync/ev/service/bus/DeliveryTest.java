@@ -48,6 +48,21 @@ class DeliveryTest {
   }
 
   @Test
+  void aReorderedBurstKeepsTheHighestThenTheNext() {
+    MemoryMessageBus bus = new MemoryMessageBus();
+    Delivery delivery = delivery(bus, new MovingClock(START));
+    AtomicInteger solves = new AtomicInteger();
+    bus.subscribe(Topics.PLAN_TRIGGERS, (record, ack) -> accept(delivery, record, solves));
+
+    bus.send(trigger(3L));
+    bus.send(trigger(1L));
+    bus.send(trigger(2L));
+    bus.send(trigger(4L));
+
+    assertThat(solves).hasValue(2);
+  }
+
+  @Test
   void threeFailuresEndOnTheDeadLetterTopic() {
     MemoryMessageBus bus = new MemoryMessageBus();
     MovingClock clock = new MovingClock(START);

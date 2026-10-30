@@ -71,3 +71,15 @@ The repository enforces a zero-tolerance verification gate via `scripts/verify.s
 # Execute the full quality gate
 ./scripts/verify.sh
 ```
+
+## Performance
+
+Measured on an Apple M4 (10 cores, 16 GB, Darwin arm64) with Temurin 21.0.13+9-LTS. The full write-up is `docs/reports/PROOF_LATENCY.md`. The 300-cab construction remains 24.258 s (`docs/reports/PLANNER_300CAB_REPORT.md`).
+
+| Run | Result |
+|---|---|
+| Construction, 10 / 20 / 50 / 100 cabs | 18 ms, 27 ms, 164 ms, 1,012 ms. Each plan passed the validator |
+| JMH charge duration across the 80 percent knee | 1.908 ± 0.132 ns/op |
+| k6, 10 users, 15 s, `GET /actuator/health` | 12,401.5 req/s, p50 684 µs, p99 1.7 ms, 186,023 responses, none failed |
+
+A single construction stays inside the 30 second budget at the case-study size of 300 cabs, 40 chargers, and 1,500 trips. That run already uses 24.258 s, and this build has no measured fleet larger than that. The k6 figure is the public health scrape. It is not a plan publish.

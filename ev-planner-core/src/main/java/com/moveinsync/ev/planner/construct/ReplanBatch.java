@@ -16,9 +16,11 @@ import java.util.Objects;
 
 /**
  * Applies several drift events to one plan. The latest event for each kind and subject is kept.
- * Equal timestamps run cab removal and charger failure before battery drift and trip edits.
+ * Equal timestamps run cab removal and charger failure before battery drift and trip edits. Once
+ * the deadline has passed, the remaining events are left and the last plan is kept.
  *
- * <p>Time O(E · T^2 · C · H · P) for E events and one ladder repair. Space O(E + T).
+ * <p>Time O(E · T^2 · C · H · P) for E events that still fit before the deadline, T trips, C cabs,
+ * H hubs, and P plugs. Space O(E + T).
  */
 public final class ReplanBatch {
 
@@ -38,12 +40,31 @@ public final class ReplanBatch {
     if (events.isEmpty()) {
       throw new IllegalArgumentException("events must not be empty");
     }
-    List<DriftEvent> unique = coalesce(events);
+    return climb(solver, input, current, coalesce(events), config, clock);
+  }
+
+  private static SolveResult climb(
+      ReplanSolver solver,
+      PlannerInput input,
+      FleetPlan current,
+      List<DriftEvent> unique,
+      SolverConfig config,
+      Clock clock) {
     SolveResult last = solver.replan(input, current, unique.get(0), config, clock);
     for (int index = 1; index < unique.size(); index++) {
+      if (!clock.instant().isBefore(config.deadline())) {
+        return stopped(last);
+      }
       last = solver.replan(input, last.plan(), unique.get(index), config, clock);
     }
     return last;
+  }
+
+  private static SolveResult stopped(SolveResult last) {
+    if (last.deadlineExhausted()) {
+      return last;
+    }
+    return new SolveResult(last.plan(), last.score(), true, last.flow());
   }
 
   private static List<DriftEvent> coalesce(List<DriftEvent> events) {

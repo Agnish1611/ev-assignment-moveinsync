@@ -13,12 +13,16 @@ import com.moveinsync.ev.planner.config.SolverConfig;
 import com.moveinsync.ev.planner.input.CabShift;
 import com.moveinsync.ev.planner.input.PlannerInput;
 import com.moveinsync.ev.planner.solve.DriftEvent;
+import com.moveinsync.ev.planner.solve.ReplanSolver;
+import com.moveinsync.ev.planner.solve.SolveResult;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
 /** Several drift events are coalesced, then applied in time and kind order. */
@@ -98,6 +102,38 @@ class ReplanBatchTest {
   }
 
   @Test
+  void aDeadlineBetweenEventsLeavesTheLaterRemovalUnapplied() {
+    Trip trip = ReplanScenes.trip("TRIP-1", 3_600, 2_000, 1_200);
+    PlannerInput fleet =
+        ReplanScenes.fleet(List.of(PlannerFixtures.cab("CAB-A", 50_000L)), List.of(trip));
+    FleetPlan current =
+        ReplanScenes.plan(
+            fleet, "plan-stop", List.of(new ReplanScenes.Hold("CAB-A", trip, 50_000L)));
+    Instant at = PlannerFixtures.START;
+    AtomicBoolean open = new AtomicBoolean(true);
+    ReplanSolver gated =
+        (input, plan, event, cfg, clk) -> {
+          SolveResult result = solver.replan(input, plan, event, cfg, clk);
+          open.set(false);
+          return result;
+        };
+
+    SolveResult result =
+        ReplanBatch.apply(
+            gated,
+            fleet,
+            current,
+            List.of(
+                new DriftEvent(DriftEvent.Kind.BATTERY, "CAB-A", at),
+                new DriftEvent(DriftEvent.Kind.CAB_REMOVED, "CAB-A", at.plusSeconds(1))),
+            config,
+            new GateClock(open, at, config.deadline()));
+
+    assertThat(result.deadlineExhausted()).isTrue();
+    assertThat(result.plan().findVehicleSchedule(VehicleId.of("CAB-A"))).isPresent();
+  }
+
+  @Test
   void anEmptyOrNullBatchIsRejected() {
     Trip trip = ReplanScenes.trip("TRIP-1", 3_600, 2_000, 1_200);
     PlannerInput fleet =
@@ -138,5 +174,32 @@ class ReplanBatchTest {
         List.of(),
         1L,
         published.inputHash());
+  }
+
+  private static final class GateClock extends Clock {
+    private final AtomicBoolean open;
+    private final Instant first;
+    private final Instant rest;
+
+    private GateClock(AtomicBoolean open, Instant first, Instant rest) {
+      this.open = open;
+      this.first = first;
+      this.rest = rest;
+    }
+
+    @Override
+    public Instant instant() {
+      return open.get() ? first : rest;
+    }
+
+    @Override
+    public ZoneId getZone() {
+      return ZoneOffset.UTC;
+    }
+
+    @Override
+    public Clock withZone(ZoneId zone) {
+      return this;
+    }
   }
 }

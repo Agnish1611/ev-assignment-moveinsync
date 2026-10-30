@@ -40,10 +40,29 @@ public final class ScaleScenario {
   }
 
   public static PlannerInput build() {
+    return fleet(CAB_COUNT, CHARGER_COUNT, TRIPS_PER_CAB);
+  }
+
+  /**
+   * A smaller copy of the evening fleet. Cab, charger, and trip identifiers use the same padding as
+   * {@link #build()}. Time and space O(C + T).
+   */
+  public static PlannerInput fleet(int cabs, int chargers, int tripsPerCab) {
+    if (cabs <= 0 || cabs > CAB_COUNT) {
+      throw new IllegalArgumentException("cabs must be from 1 to " + CAB_COUNT + ": " + cabs);
+    }
+    if (chargers <= 0 || chargers > CHARGER_COUNT) {
+      throw new IllegalArgumentException(
+          "chargers must be from 1 to " + CHARGER_COUNT + ": " + chargers);
+    }
+    if (tripsPerCab <= 0 || tripsPerCab > TRIPS_PER_CAB) {
+      throw new IllegalArgumentException(
+          "tripsPerCab must be from 1 to " + TRIPS_PER_CAB + ": " + tripsPerCab);
+    }
     Location depot = Location.of("LOC-HUB", "Hub");
     Location pickup = Location.of("LOC-P", "Pickup");
     Location dropoff = Location.of("LOC-D", "Drop");
-    Hub hub = Hub.of(TENANT.value(), "HUB-1", "Hub", depot, ZoneId.of("UTC"), CHARGER_COUNT);
+    Hub hub = Hub.of(TENANT.value(), "HUB-1", "Hub", depot, ZoneId.of("UTC"), chargers);
     PlannerInput.Builder builder =
         PlannerInput.builder()
             .tenantId(TENANT)
@@ -51,10 +70,10 @@ public final class ScaleScenario {
             .addHub(hub)
             .distanceProvider(new ConstantSpeedDistanceProvider(5_000, 10))
             .consumptionModel(new ConstantConsumptionModel());
-    for (int charger = 0; charger < CHARGER_COUNT; charger++) {
+    for (int charger = 0; charger < chargers; charger++) {
       builder.addCharger(Charger.of(TENANT.value(), "CHG-" + pad(charger, 2), "HUB-1", 50));
     }
-    for (int cab = 0; cab < CAB_COUNT; cab++) {
+    for (int cab = 0; cab < cabs; cab++) {
       builder.addCab(
           new CabShift(
               new Vehicle(TENANT, VehicleId.of("CAB-" + pad(cab, 3)), BATTERY_WH, 150L, 50),
@@ -62,13 +81,13 @@ public final class ScaleScenario {
               INITIAL_SOC_WH,
               START));
     }
-    for (int cab = 0; cab < CAB_COUNT; cab++) {
-      for (int slot = 0; slot < TRIPS_PER_CAB; slot++) {
+    for (int cab = 0; cab < cabs; cab++) {
+      for (int slot = 0; slot < tripsPerCab; slot++) {
         Instant pickupTime = START.plusSeconds(600L + (long) slot * SLOT_GAP_SECONDS);
         builder.addTrip(
             new Trip(
                 TENANT,
-                TripId.of("TRIP-" + pad(cab * TRIPS_PER_CAB + slot, 4)),
+                TripId.of("TRIP-" + pad(cab * tripsPerCab + slot, 4)),
                 pickupTime,
                 pickup,
                 dropoff,
