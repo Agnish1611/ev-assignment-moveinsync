@@ -1,7 +1,11 @@
 package com.moveinsync.ev.validator;
 
+import com.moveinsync.ev.domain.schedule.ChargingSession;
 import com.moveinsync.ev.domain.schedule.FleetPlan;
+import com.moveinsync.ev.domain.schedule.RouteActivity;
+import com.moveinsync.ev.domain.schedule.TripAssignment;
 import com.moveinsync.ev.domain.schedule.VehicleSchedule;
+import com.moveinsync.ev.domain.tenant.TenantId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -9,92 +13,236 @@ import java.util.Objects;
 /**
  * Independent plan validation engine for electric vehicle fleet charging and trip assignments.
  *
- * <p>Enforces the non-negotiable hard invariants H1 through H6:
- *
- * <ul>
- *   <li><b>H1:</b> Battery SoC never below 15% safety floor at any point, including deadheads.
- *   <li><b>H2:</b> Concurrent charging sessions at a hub never exceed physical charger capacity at
- *       any second (evaluated via continuous event sweep, independent of discrete solver grids).
- *   <li><b>H3:</b> Every assigned trip starts on time and finishes by its latest allowed finish.
- *   <li><b>H4:</b> Each trip assigned to at most one cab; a cab never does two things at once.
- *   <li><b>H5:</b> Reserve-to-hub: after every trip the cab can still reach a charger above the
- *       floor.
- *   <li><b>H6:</b> Charging session duration strictly matches or exceeds the two-segment curve.
- * </ul>
+ * <p>Enforces the non-negotiable hard invariants H1 through H6, multi-tenant isolation, referential
+ * integrity against ground truth, and totality.
  *
  * <p>Architectural Rule: As mandated by AGENTS.md, this validator depends strictly and solely on
  * {@code ev-domain} and standard Java libraries. It has zero coupling with {@code ev-planner-core}
  * or {@code ev-service}.
- *
- * <p>Complexity:
- *
- * <ul>
- *   <li>Time complexity: O(S log S + T * H + C * L), where S is charging sessions, T is trips, H is
- *       hubs, C is cabs, and L is average route length.
- *   <li>Space complexity: O(S + T + C * L).
- * </ul>
  */
 public final class PlanValidator {
 
   private final ValidationContext context;
-  private final BatteryFloorValidator batteryValidator;
-  private final ChargerCapacityValidator capacityValidator;
-  private final TripTimingValidator timingValidator;
-  private final AssignmentValidator assignmentValidator;
-  private final ReserveToHubValidator reserveValidator;
-  private final ChargingCurveValidator curveValidator;
 
-  public PlanValidator(ValidationContext context) {
-    this.context = Objects.requireNonNull(context, "ValidationContext must not be null");
-    this.batteryValidator = new BatteryFloorValidator(context);
-    this.capacityValidator = new ChargerCapacityValidator(context);
-    this.timingValidator = new TripTimingValidator();
-    this.assignmentValidator = new AssignmentValidator(context);
-    this.reserveValidator = new ReserveToHubValidator(context);
-    this.curveValidator = new ChargingCurveValidator(context);
+  /**
+   * Constructs a plan validator operating against dynamic {@link ValidationInput} ground truths.
+   */
+  public PlanValidator() {
+    this.context = null;
   }
 
-  /** Returns the active validation context. */
+  /**
+   * Constructs a plan validator with a legacy static {@link ValidationContext}.
+   *
+   * @param context legacy validation context
+   */
+  public PlanValidator(ValidationContext context) {
+    this.context = Objects.requireNonNull(context, "ValidationContext must not be null");
+  }
+
+  /** Returns the active validation context, if configured. */
   public ValidationContext context() {
     return context;
   }
 
   /**
-   * Performs an exhaustive independent validation check of the candidate fleet plan.
+   * Performs an exhaustive independent validation check of the candidate fleet plan against
+   * authoritative ground truth {@link ValidationInput}.
+   *
+   * <p>Totality guarantee (D5): Never throws runtime exceptions; traps unexpected failures into
+   * {@link RuleId#VALIDATOR_INTERNAL_ERROR} (fail-closed).
+   *
+   * @param input authoritative ground truth
+   * @param candidate the candidate plan to validate
+   * @return structured validation report detailing all findings
+   */
+  public ValidationReport validate(ValidationInput input, FleetPlan candidate) {
+    try {
+      Objects.requireNonNull(input, "ValidationInput must not be null");
+      Objects.requireNonNull(candidate, "FleetPlan candidate must not be null");
+
+      List<PlanViolation> violations = new ArrayList<>();
+      checkTenants(input, candidate, violations);
+      checkReferentialIntegrity(input, candidate, violations);
+
+      ValidationContext valCtx = input.toValidationContext();
+      runInvariants(valCtx, candidate, violations);
+
+      return new ValidationReport(
+          violations,
+          candidate.vehicleSchedules().size(),
+          candidate.totalAssignedTrips(),
+          candidate.totalChargingSessions());
+    } catch (RuntimeException ex) {
+      return failClosedReport(candidate, ex);
+    }
+  }
+
+  /**
+   * Legacy validation entry point delegating to ground truth validation.
    *
    * @param plan the candidate plan to validate
    * @return structured validation report detailing all findings
    */
   public ValidationReport validate(FleetPlan plan) {
-    Objects.requireNonNull(plan, "FleetPlan must not be null");
-
-    List<PlanViolation> allViolations = new ArrayList<>();
-
-    // 1. Invariant H1: Battery Floor & Energy Balance
-    for (VehicleSchedule schedule : plan.vehicleSchedules()) {
-      allViolations.addAll(batteryValidator.validate(schedule));
+    if (context == null) {
+      throw new IllegalStateException(
+          "ValidationContext not provided. Call validate(ValidationInput, FleetPlan) instead.");
+    }
+    if (plan == null) {
+      return failClosedReport(null, new NullPointerException("FleetPlan must not be null"));
     }
 
-    // 2. Invariant H2: Charger Capacity (Continuous Event Sweep)
-    allViolations.addAll(capacityValidator.validate(plan));
+    ValidationInput.Builder b =
+        ValidationInput.builder()
+            .tenantId(TenantId.of(plan.tenantId()))
+            .horizon(plan.horizonStart(), plan.horizonEnd())
+            .consumptionModel(context.consumptionModel())
+            .distanceProvider(context.distanceProvider())
+            .chargingCurve(context.chargingCurve())
+            .batteryFloorPercentage(context.batteryFloorPercentage())
+            .enforceReserveToHub(context.enforceReserveToHub());
+    context.hubs().values().forEach(b::addHub);
+    context.chargers().values().forEach(b::addCharger);
+    for (VehicleSchedule vs : plan.vehicleSchedules()) {
+      b.addVehicle(vs.vehicle(), vs.initialLocation(), vs.initialSocWh());
+      for (RouteActivity activity : vs.activities()) {
+        if (activity instanceof TripAssignment ta) {
+          b.addTrip(ta.trip());
+        }
+      }
+    }
+    return validate(b.build(), plan);
+  }
 
-    // 3. Invariant H3: Trip Timing & Deadlines
-    allViolations.addAll(timingValidator.validate(plan));
+  private void checkTenants(
+      ValidationInput input, FleetPlan candidate, List<PlanViolation> violations) {
+    if (!input.tenantId().value().equals(candidate.tenantId())) {
+      violations.add(
+          PlanViolation.ofGeneral(
+              RuleId.TENANT_MISMATCH,
+              "Candidate plan tenant ("
+                  + candidate.tenantId()
+                  + ") does not match input tenant ("
+                  + input.tenantId().value()
+                  + ")"));
+    }
+    for (VehicleSchedule schedule : candidate.vehicleSchedules()) {
+      if (!schedule.vehicle().tenantId().value().equals("default")
+          && !input.tenantId().equals(schedule.vehicle().tenantId())) {
+        violations.add(
+            PlanViolation.ofVehicle(
+                RuleId.TENANT_MISMATCH,
+                schedule.vehicle().id(),
+                schedule.availableFrom(),
+                "Vehicle "
+                    + schedule.vehicle().id()
+                    + " tenant ("
+                    + schedule.vehicle().tenantId().value()
+                    + ") does not match input tenant ("
+                    + input.tenantId().value()
+                    + ")"));
+      }
+      for (RouteActivity activity : schedule.activities()) {
+        if (activity instanceof TripAssignment assign) {
+          if (!assign.trip().tenantId().value().equals("default")
+              && !input.tenantId().equals(assign.trip().tenantId())) {
+            violations.add(
+                PlanViolation.ofTrip(
+                    RuleId.TENANT_MISMATCH,
+                    assign.trip().id(),
+                    schedule.vehicle().id(),
+                    assign.pickupTime(),
+                    "Trip "
+                        + assign.trip().id()
+                        + " tenant ("
+                        + assign.trip().tenantId().value()
+                        + ") does not match input tenant ("
+                        + input.tenantId().value()
+                        + ")"));
+          }
+        }
+      }
+    }
+  }
 
-    // 4. Invariant H4: Single Assignment & Single Cab No-Overlap
-    allViolations.addAll(assignmentValidator.validate(plan));
+  private void checkReferentialIntegrity(
+      ValidationInput input, FleetPlan candidate, List<PlanViolation> violations) {
+    for (VehicleSchedule schedule : candidate.vehicleSchedules()) {
+      if (input.findVehicle(schedule.vehicle().id()).isEmpty()) {
+        violations.add(
+            PlanViolation.ofVehicle(
+                RuleId.UNKNOWN_VEHICLE,
+                schedule.vehicle().id(),
+                schedule.availableFrom(),
+                "Vehicle " + schedule.vehicle().id() + " is not registered in ground truth"));
+      }
+      for (RouteActivity activity : schedule.activities()) {
+        if (activity instanceof TripAssignment assign) {
+          if (input.findTrip(assign.trip().id()).isEmpty()) {
+            violations.add(
+                PlanViolation.ofTrip(
+                    RuleId.UNKNOWN_TRIP,
+                    assign.trip().id(),
+                    schedule.vehicle().id(),
+                    assign.pickupTime(),
+                    "Trip " + assign.trip().id() + " is not registered in ground truth"));
+          }
+        } else if (activity instanceof ChargingSession session) {
+          if (input.findHub(session.hubId()).isEmpty()) {
+            violations.add(
+                PlanViolation.ofHub(
+                    RuleId.UNKNOWN_HUB,
+                    session.hubId(),
+                    session.startTime(),
+                    "Hub " + session.hubId() + " is not registered in ground truth"));
+          }
+          if (input.findCharger(session.chargerId()).isEmpty()) {
+            violations.add(
+                PlanViolation.ofHub(
+                    RuleId.UNKNOWN_CHARGER,
+                    session.hubId(),
+                    session.startTime(),
+                    "Charger " + session.chargerId() + " is not registered in ground truth"));
+          }
+        }
+      }
+    }
+  }
 
-    // 5. Invariant H5: Reserve-to-Hub Invariant
-    allViolations.addAll(reserveValidator.validate(plan));
+  private void runInvariants(
+      ValidationContext valCtx, FleetPlan candidate, List<PlanViolation> violations) {
+    BatteryFloorValidator batVal = new BatteryFloorValidator(valCtx);
+    ChargerCapacityValidator capVal = new ChargerCapacityValidator(valCtx);
+    TripTimingValidator timeVal = new TripTimingValidator();
+    AssignmentValidator assignVal = new AssignmentValidator(valCtx);
+    ReserveToHubValidator resVal = new ReserveToHubValidator(valCtx);
+    ChargingCurveValidator curveVal = new ChargingCurveValidator(valCtx);
 
-    // 6. Invariant H6: Two-Segment Charging Curve Matching
-    allViolations.addAll(curveValidator.validate(plan));
+    for (VehicleSchedule schedule : candidate.vehicleSchedules()) {
+      violations.addAll(batVal.validate(schedule));
+    }
+    violations.addAll(capVal.validate(candidate));
+    violations.addAll(timeVal.validate(candidate));
+    violations.addAll(assignVal.validate(candidate));
+    violations.addAll(resVal.validate(candidate));
+    violations.addAll(curveVal.validate(candidate));
+  }
 
-    int totalTripsChecked = plan.totalAssignedTrips();
-    int totalSessionsChecked = plan.totalChargingSessions();
-    int totalVehiclesChecked = plan.vehicleSchedules().size();
-
+  private ValidationReport failClosedReport(FleetPlan candidate, RuntimeException ex) {
+    String msg =
+        "Unexpected validator internal error: "
+            + (ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName());
+    int vehicles =
+        (candidate != null && candidate.vehicleSchedules() != null)
+            ? candidate.vehicleSchedules().size()
+            : 0;
+    int trips = (candidate != null) ? candidate.totalAssignedTrips() : 0;
+    int sessions = (candidate != null) ? candidate.totalChargingSessions() : 0;
     return new ValidationReport(
-        allViolations, totalVehiclesChecked, totalTripsChecked, totalSessionsChecked);
+        List.of(PlanViolation.ofGeneral(RuleId.VALIDATOR_INTERNAL_ERROR, msg)),
+        vehicles,
+        trips,
+        sessions);
   }
 }

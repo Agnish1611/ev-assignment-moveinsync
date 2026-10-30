@@ -32,5 +32,52 @@ public enum RuleId {
   /**
    * H6: Charging session duration strictly matches or exceeds the deterministic two-segment curve.
    */
-  H6_CHARGING_CURVE
+  H6_CHARGING_CURVE,
+
+  /** Multi-tenant isolation breach (cross-tenant resource reference). */
+  TENANT_MISMATCH,
+
+  /** Candidate schedule references an unknown vehicle identifier not in ground truth. */
+  UNKNOWN_VEHICLE,
+
+  /** Candidate schedule references an unknown trip identifier not in ground truth. */
+  UNKNOWN_TRIP,
+
+  /** Candidate session references an unknown hub identifier not in ground truth. */
+  UNKNOWN_HUB,
+
+  /** Candidate session references an unknown charger identifier not in ground truth. */
+  UNKNOWN_CHARGER,
+
+  /** Candidate claims an SoC that differs from independently recomputed ground truth energy. */
+  CLAIMED_SOC_MISMATCH,
+
+  /** Candidate schedules a session on a faulty charger or during a scheduled outage window. */
+  CHARGER_UNAVAILABLE,
+
+  /** Candidate books two concurrent sessions on the exact same charger plug. */
+  CHARGER_DOUBLE_BOOKED,
+
+  /**
+   * A required trip from the input pool is missing from both assigned and unassigned collections.
+   */
+  TRIP_OMITTED,
+
+  /** Candidate unassigned list references an unknown trip. */
+  TRIP_UNKNOWN,
+
+  /** A trip appears simultaneously in both assigned schedules and unassigned list. */
+  TRIP_ASSIGNED_AND_UNASSIGNED,
+
+  /** Charging session claimed cost differs from independent tariff calculation. */
+  COST_MISMATCH,
+
+  /** State of charge value is physically out of bounds (negative or exceeding battery capacity). */
+  SOC_OUT_OF_RANGE,
+
+  /** Routing distance/duration unavailable for an assigned geographic corridor. */
+  ROUTE_UNAVAILABLE,
+
+  /** Unexpected exception trapped by the validator top-level totality guard (fail-closed). */
+  VALIDATOR_INTERNAL_ERROR
 }
