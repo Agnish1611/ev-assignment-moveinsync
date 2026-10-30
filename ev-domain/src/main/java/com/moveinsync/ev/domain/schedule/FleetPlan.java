@@ -1,5 +1,6 @@
 package com.moveinsync.ev.domain.schedule;
 
+import com.moveinsync.ev.domain.tenant.TenantId;
 import com.moveinsync.ev.domain.vehicle.VehicleId;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -48,6 +49,31 @@ public record FleetPlan(
 
     vehicleSchedules = Collections.unmodifiableList(new ArrayList<>(vehicleSchedules));
     unassignedTrips = Collections.unmodifiableList(new ArrayList<>(unassignedTrips));
+  }
+
+  public FleetPlan(
+      String planId,
+      TenantId tenantId,
+      Instant horizonStart,
+      Instant horizonEnd,
+      List<VehicleSchedule> vehicleSchedules,
+      List<UnassignedTrip> unassignedTrips,
+      long seed,
+      String inputHash) {
+    this(
+        planId,
+        Objects.requireNonNull(tenantId, "tenantId must not be null").value(),
+        horizonStart,
+        horizonEnd,
+        vehicleSchedules,
+        unassignedTrips,
+        seed,
+        inputHash);
+  }
+
+  /** Returns strongly typed {@link TenantId}. */
+  public TenantId parsedTenantId() {
+    return TenantId.of(tenantId);
   }
 
   public int totalAssignedTrips() {

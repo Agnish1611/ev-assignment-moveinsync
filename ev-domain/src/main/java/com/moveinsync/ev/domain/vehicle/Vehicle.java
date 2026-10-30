@@ -1,5 +1,6 @@
 package com.moveinsync.ev.domain.vehicle;
 
+import com.moveinsync.ev.domain.tenant.TenantId;
 import java.util.Objects;
 
 /**
@@ -14,18 +15,24 @@ import java.util.Objects;
  *   <li>Maximum charge acceptance rate in kilowatts (kW)
  * </ul>
  *
+ * @param tenantId tenant identifier
  * @param id unique vehicle identifier
  * @param batteryCapacityWh total usable battery capacity in Watt-hours
  * @param baseConsumptionWhPerKm nominal energy consumption in Watt-hours per kilometre
  * @param maxChargeKw maximum fast-charging acceptance power in kilowatts
  */
 public record Vehicle(
-    VehicleId id, long batteryCapacityWh, long baseConsumptionWhPerKm, int maxChargeKw) {
+    TenantId tenantId,
+    VehicleId id,
+    long batteryCapacityWh,
+    long baseConsumptionWhPerKm,
+    int maxChargeKw) {
 
   public static final int STANDARD_FLOOR_PERCENT = 15;
   public static final int DEFAULT_ROBUST_MARGIN_PERCENT = 18;
 
   public Vehicle {
+    Objects.requireNonNull(tenantId, "tenantId must not be null");
     Objects.requireNonNull(id, "Vehicle id must not be null");
     if (batteryCapacityWh <= 0) {
       throw new IllegalArgumentException(
@@ -39,6 +46,11 @@ public record Vehicle(
       throw new IllegalArgumentException(
           "Maximum charge power must be positive: " + maxChargeKw + " kW");
     }
+  }
+
+  public Vehicle(
+      VehicleId id, long batteryCapacityWh, long baseConsumptionWhPerKm, int maxChargeKw) {
+    this(TenantId.of("default"), id, batteryCapacityWh, baseConsumptionWhPerKm, maxChargeKw);
   }
 
   /**

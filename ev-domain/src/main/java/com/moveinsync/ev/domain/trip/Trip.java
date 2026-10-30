@@ -1,6 +1,7 @@
 package com.moveinsync.ev.domain.trip;
 
 import com.moveinsync.ev.domain.location.Location;
+import com.moveinsync.ev.domain.tenant.TenantId;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
@@ -11,6 +12,7 @@ import java.util.Objects;
  * <p>In accordance with privacy invariants, {@code employeeRef} is strictly an opaque identifier
  * and must never contain personal data (phone numbers, emails, personal names).
  *
+ * @param tenantId tenant identifier
  * @param id unique trip identifier
  * @param startTs planned pickup time in UTC epoch seconds
  * @param fromLocation pickup location node
@@ -21,6 +23,7 @@ import java.util.Objects;
  * @param employeeRef opaque passenger / booking reference ID (strictly non-PII)
  */
 public record Trip(
+    TenantId tenantId,
     TripId id,
     Instant startTs,
     Location fromLocation,
@@ -31,6 +34,7 @@ public record Trip(
     String employeeRef) {
 
   public Trip {
+    Objects.requireNonNull(tenantId, "tenantId must not be null");
     Objects.requireNonNull(id, "Trip id must not be null");
     Objects.requireNonNull(startTs, "startTs must not be null");
     Objects.requireNonNull(fromLocation, "fromLocation must not be null");
@@ -66,6 +70,27 @@ public record Trip(
     }
   }
 
+  public Trip(
+      TripId id,
+      Instant startTs,
+      Location fromLocation,
+      Location toLocation,
+      int distanceMeters,
+      int estimatedDurationSeconds,
+      Instant latestFinishTs,
+      String employeeRef) {
+    this(
+        TenantId.of("default"),
+        id,
+        startTs,
+        fromLocation,
+        toLocation,
+        distanceMeters,
+        estimatedDurationSeconds,
+        latestFinishTs,
+        employeeRef);
+  }
+
   /**
    * Calculates the planned dropoff instant (pickup time plus estimated duration).
    *
@@ -79,9 +104,9 @@ public record Trip(
    * Calculates the schedule slack in seconds (time between planned dropoff and latest allowed
    * finish).
    *
-   * @return slack in seconds (always non-negative)
+   * @return slack in integer seconds
    */
   public long slackSeconds() {
-    return Duration.between(plannedDropoffTs(), latestFinishTs).getSeconds();
+    return Duration.between(plannedDropoffTs(), latestFinishTs).toSeconds();
   }
 }
