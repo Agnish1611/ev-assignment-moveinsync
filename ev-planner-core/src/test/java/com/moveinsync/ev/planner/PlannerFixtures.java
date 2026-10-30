@@ -68,16 +68,48 @@ public final class PlannerFixtures {
   }
 
   public static Trip trip(String id, Instant pickupTime, Location from, Location to) {
+    return trip(id, pickupTime, from, to, 10_000);
+  }
+
+  public static Trip trip(
+      String id, Instant pickupTime, Location from, Location to, int distanceMeters) {
     return new Trip(
         TENANT,
         TripId.of(id),
         pickupTime,
         from,
         to,
-        10_000,
+        distanceMeters,
         1_200,
         pickupTime.plusSeconds(3_600),
         "EMP-1");
+  }
+
+  public static Location depot() {
+    return Location.of("LOC-HUB", "Hub");
+  }
+
+  /** Horizon, one hub, one charger, and the constant distance and consumption models. */
+  public static PlannerInput.Builder shell() {
+    Location depot = depot();
+    Hub hub = Hub.of(TENANT.value(), "HUB-1", "Hub", depot, ZoneId.of("UTC"), 4);
+    Charger charger = Charger.of(TENANT.value(), "CHG-1", "HUB-1", 50);
+    return PlannerInput.builder()
+        .tenantId(TENANT)
+        .horizon(START, END)
+        .addHub(hub)
+        .addCharger(charger)
+        .distanceProvider(new ConstantSpeedDistanceProvider(5_000, 10))
+        .consumptionModel(new ConstantConsumptionModel());
+  }
+
+  public static CabShift cab(String id, long socWh) {
+    return cab(id, socWh, 150L, depot());
+  }
+
+  public static CabShift cab(String id, long socWh, long whPerKm, Location location) {
+    return new CabShift(
+        new Vehicle(TENANT, VehicleId.of(id), 60_000L, whPerKm, 50), location, socWh, START);
   }
 
   public static PlannerInput withMatrix() {
