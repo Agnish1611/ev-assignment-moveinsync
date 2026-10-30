@@ -41,6 +41,20 @@ final class BatteryFloorValidator {
 
   private void checkInitialSocFloor(
       VehicleSchedule schedule, Vehicle vehicle, long floorWh, List<PlanViolation> violations) {
+    if (schedule.initialSocWh() < 0 || schedule.initialSocWh() > vehicle.batteryCapacityWh()) {
+      violations.add(
+          PlanViolation.ofVehicle(
+              RuleId.SOC_OUT_OF_RANGE,
+              vehicle.id(),
+              schedule.availableFrom(),
+              "Vehicle "
+                  + vehicle.id()
+                  + " initial SoC ("
+                  + schedule.initialSocWh()
+                  + " Wh) is out of bounds [0, "
+                  + vehicle.batteryCapacityWh()
+                  + " Wh]"));
+    }
     if (schedule.initialSocWh() < floorWh) {
       violations.add(
           PlanViolation.ofVehicle(
@@ -125,6 +139,23 @@ final class BatteryFloorValidator {
                   + floorWh
                   + " Wh) upon dropoff for trip "
                   + trip.id()));
+    }
+
+    if (assign.departureAfterDropoffSocWh() < 0
+        || assign.departureAfterDropoffSocWh() > vehicle.batteryCapacityWh()) {
+      violations.add(
+          PlanViolation.ofTrip(
+              RuleId.SOC_OUT_OF_RANGE,
+              trip.id(),
+              vehicle.id(),
+              assign.dropoffTime(),
+              "Vehicle "
+                  + vehicle.id()
+                  + " claimed departure SoC after dropoff ("
+                  + assign.departureAfterDropoffSocWh()
+                  + " Wh) is out of bounds [0, "
+                  + vehicle.batteryCapacityWh()
+                  + " Wh]"));
     }
 
     if (assign.departureAfterDropoffSocWh() != dropoffSocWh) {
@@ -264,6 +295,20 @@ final class BatteryFloorValidator {
 
     checkSessionStartSoc(session, vehicle, arrivalAtHubSoc, floorWh, violations);
     checkSessionSocBounds(session, vehicle, violations);
+    if (session.startSocWh() > session.targetSocWh()) {
+      violations.add(
+          PlanViolation.ofVehicle(
+              RuleId.H6_CHARGING_CURVE,
+              vehicle.id(),
+              session.startTime(),
+              "Charging session "
+                  + session.sessionId()
+                  + " start SoC ("
+                  + session.startSocWh()
+                  + " Wh) exceeds target SoC ("
+                  + session.targetSocWh()
+                  + " Wh)"));
+    }
     return validateSessionDelivery(session, vehicle, arrivalAtHubSoc, violations);
   }
 

@@ -31,15 +31,6 @@ public final class VehicleSchedule {
     this.availableFrom = Objects.requireNonNull(availableFrom, "availableFrom must not be null");
     Objects.requireNonNull(activities, "activities list must not be null");
 
-    if (initialSocWh < 0 || initialSocWh > vehicle.batteryCapacityWh()) {
-      throw new IllegalArgumentException(
-          "initialSocWh ("
-              + initialSocWh
-              + ") must be within [0, "
-              + vehicle.batteryCapacityWh()
-              + "]");
-    }
-
     List<RouteActivity> sorted = new ArrayList<>(activities);
     sorted.sort(Comparator.comparing(RouteActivity::activityStartTime));
 

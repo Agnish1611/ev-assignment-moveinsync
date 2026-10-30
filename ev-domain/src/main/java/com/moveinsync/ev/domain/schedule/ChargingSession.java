@@ -44,16 +44,6 @@ public record ChargingSession(
       throw new IllegalArgumentException(
           "startTime (" + startTime + ") must be before endTime (" + endTime + ")");
     }
-    if (startSocWh < 0) {
-      throw new IllegalArgumentException("startSocWh must be non-negative: " + startSocWh);
-    }
-    if (targetSocWh < startSocWh) {
-      throw new IllegalArgumentException(
-          "targetSocWh (" + targetSocWh + ") cannot be less than startSocWh (" + startSocWh + ")");
-    }
-    if (costMicros < 0) {
-      throw new IllegalArgumentException("costMicros must be non-negative: " + costMicros);
-    }
   }
 
   @Override

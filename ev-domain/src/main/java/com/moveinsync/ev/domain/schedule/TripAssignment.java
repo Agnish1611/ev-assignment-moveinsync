@@ -54,22 +54,6 @@ public record TripAssignment(
     if (deadheadEnergyWh < 0) {
       throw new IllegalArgumentException("deadheadEnergyWh must be >= 0: " + deadheadEnergyWh);
     }
-    if (arrivalAtPickupSocWh < 0) {
-      throw new IllegalArgumentException(
-          "arrivalAtPickupSocWh must be >= 0: " + arrivalAtPickupSocWh);
-    }
-    if (departureAfterDropoffSocWh < 0) {
-      throw new IllegalArgumentException(
-          "departureAfterDropoffSocWh must be >= 0: " + departureAfterDropoffSocWh);
-    }
-    if (departureAfterDropoffSocWh > arrivalAtPickupSocWh) {
-      throw new IllegalArgumentException(
-          "departureAfterDropoffSocWh ("
-              + departureAfterDropoffSocWh
-              + ") cannot exceed arrivalAtPickupSocWh ("
-              + arrivalAtPickupSocWh
-              + ")");
-    }
   }
 
   @Override
