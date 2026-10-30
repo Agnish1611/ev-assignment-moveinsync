@@ -276,6 +276,8 @@ class DomainCoverageTest {
     assertThat(sched.availableFrom()).isEqualTo(t0);
 
     ConstantSpeedDistanceProvider csp = new ConstantSpeedDistanceProvider(4000, 10);
+    assertThat(csp.defaultDistanceMeters()).isEqualTo(4000);
+    assertThat(csp.speedMetersPerSecond()).isEqualTo(10);
     assertThat(csp.getDistanceAndDuration(locA, locA).distanceMeters()).isZero();
     assertThat(csp.getDistanceAndDuration(locA, locB).distanceMeters()).isEqualTo(4000);
     assertThatThrownBy(() -> new ConstantSpeedDistanceProvider(-1, 10))

@@ -28,6 +28,8 @@ class DistanceProviderTest {
     DistanceDuration result = provider.getDistanceAndDuration(locA, locB);
     assertThat(result.distanceMeters()).isEqualTo(12_000);
     assertThat(result.durationSeconds()).isEqualTo(1200);
+    assertThat(provider.entries()).hasSize(1);
+    assertThat(provider.fallback()).isEmpty();
 
     // A -> A is zero distance and zero duration
     DistanceDuration self = provider.getDistanceAndDuration(locA, locA);
@@ -42,6 +44,7 @@ class DistanceProviderTest {
     MatrixDistanceProvider provider = new MatrixDistanceProvider(Map.of(), fallback);
 
     DistanceDuration result = provider.getDistanceAndDuration(locA, locC);
+    assertThat(provider.fallback()).contains(fallback);
     assertThat(result.distanceMeters()).isEqualTo(8_000);
     // 8,000 / 10 = 800s
     assertThat(result.durationSeconds()).isEqualTo(800);
@@ -57,10 +60,28 @@ class DistanceProviderTest {
   }
 
   @Test
+  @DisplayName("Matrix entries are sorted by origin id then destination id")
+  void entriesAreSorted() {
+    MatrixDistanceProvider.LocationPair later =
+        new MatrixDistanceProvider.LocationPair(LocationId.of("LOC-B"), LocationId.of("LOC-A"));
+    MatrixDistanceProvider.LocationPair earlier =
+        new MatrixDistanceProvider.LocationPair(LocationId.of("LOC-A"), LocationId.of("LOC-B"));
+    MatrixDistanceProvider provider =
+        new MatrixDistanceProvider(
+            Map.of(later, DistanceDuration.of(1, 1), earlier, DistanceDuration.of(2, 2)));
+
+    assertThat(provider.entries()).hasSize(2);
+    assertThat(provider.entries().get(0).getKey().from().value()).isEqualTo("LOC-A");
+    assertThat(provider.entries().get(1).getKey().from().value()).isEqualTo("LOC-B");
+  }
+
+  @Test
   @DisplayName("ConstantSpeedDistanceProvider calculates duration with conservative round UP")
   void constantSpeedDurationRounding() {
     // 10,001 metres at 10 m/s = 1000.1 seconds -> rounds UP to 1001 seconds
     ConstantSpeedDistanceProvider provider = new ConstantSpeedDistanceProvider(10_001, 10);
+    assertThat(provider.defaultDistanceMeters()).isEqualTo(10_001);
+    assertThat(provider.speedMetersPerSecond()).isEqualTo(10);
     DistanceDuration result = provider.getDistanceAndDuration(locA, locB);
     assertThat(result.durationSeconds()).isEqualTo(1001);
   }

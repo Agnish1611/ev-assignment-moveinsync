@@ -27,6 +27,14 @@ public final class ConstantConsumptionModel implements ConsumptionModel {
     this.acOnFactorBasisPoints = acOnFactorBasisPoints;
   }
 
+  public int trafficFactorBasisPoints() {
+    return trafficFactorBasisPoints;
+  }
+
+  public int acOnFactorBasisPoints() {
+    return acOnFactorBasisPoints;
+  }
+
   @Override
   public long calculateEnergyWh(
       Vehicle vehicle, int distanceMeters, Instant travelTime, boolean acOn) {

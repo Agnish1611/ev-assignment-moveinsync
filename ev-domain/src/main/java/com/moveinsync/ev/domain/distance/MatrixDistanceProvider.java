@@ -2,8 +2,11 @@ package com.moveinsync.ev.domain.distance;
 
 import com.moveinsync.ev.domain.location.Location;
 import com.moveinsync.ev.domain.location.LocationId;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -30,6 +33,23 @@ public final class MatrixDistanceProvider implements DistanceProvider {
     Objects.requireNonNull(matrix, "matrix map must not be null");
     this.matrix = Collections.unmodifiableMap(new HashMap<>(matrix));
     this.fallbackProvider = fallbackProvider;
+  }
+
+  /** Returns matrix entries sorted by origin id, then destination id. */
+  public List<Map.Entry<LocationPair, DistanceDuration>> entries() {
+    List<Map.Entry<LocationPair, DistanceDuration>> copy = new ArrayList<>();
+    for (Map.Entry<LocationPair, DistanceDuration> entry : matrix.entrySet()) {
+      copy.add(Map.entry(entry.getKey(), entry.getValue()));
+    }
+    copy.sort(
+        Comparator.comparing(
+                (Map.Entry<LocationPair, DistanceDuration> entry) -> entry.getKey().from().value())
+            .thenComparing(entry -> entry.getKey().to().value()));
+    return List.copyOf(copy);
+  }
+
+  public Optional<DistanceProvider> fallback() {
+    return Optional.ofNullable(fallbackProvider);
   }
 
   @Override

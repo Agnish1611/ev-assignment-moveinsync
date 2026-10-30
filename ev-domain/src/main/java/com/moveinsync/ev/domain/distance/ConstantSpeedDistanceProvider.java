@@ -28,6 +28,14 @@ public final class ConstantSpeedDistanceProvider implements DistanceProvider {
     this.speedMetersPerSecond = speedMetersPerSecond;
   }
 
+  public int defaultDistanceMeters() {
+    return defaultDistanceMeters;
+  }
+
+  public int speedMetersPerSecond() {
+    return speedMetersPerSecond;
+  }
+
   public ConstantSpeedDistanceProvider() {
     this(5_000, DEFAULT_SPEED_METRES_PER_SECOND);
   }

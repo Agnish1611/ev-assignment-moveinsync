@@ -34,3 +34,4 @@ Decisions not covered in `docs/ARCHITECTURE.md` are recorded here (one line: dec
 | 2026-10-30 | verify.sh grep gates fail closed when grep exits >= 2 | A missing or unreadable scan path must not be reported as a clean scan |
 | 2026-10-30 | Leave `a1c9be4` in history | That commit fails test compilation; rewriting it is forbidden and the branch tip already passes `scripts/verify.sh` |
 | 2026-10-30 | Keep PIT `STRONGER` and do not exclude validator classes to chase 90% | The Phase 2 gate is JaCoCo plus named mutation tests; a higher PIT score from a weaker mutator set would hide survivors rather than kill them |
+| 2026-10-30 | D18: Planning floor is 17 or 18 percent, lock window is 900 seconds, change penalty is 1_000_000 micros | The planner stays above the validator's 15 percent floor; one changed assignment must save more than 1 currency unit before a replan prefers it |

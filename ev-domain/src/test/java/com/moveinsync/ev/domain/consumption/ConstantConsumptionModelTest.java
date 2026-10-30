@@ -103,6 +103,8 @@ class ConstantConsumptionModelTest {
     Vehicle customCab =
         new Vehicle(TenantId.of("tenant-fixture"), VehicleId.of("CAB-GOLD"), 75_000L, 175L, 60);
     ConstantConsumptionModel model = new ConstantConsumptionModel(12_500, 11_500);
+    assertThat(model.trafficFactorBasisPoints()).isEqualTo(12_500);
+    assertThat(model.acOnFactorBasisPoints()).isEqualTo(11_500);
 
     long energy =
         model.calculateEnergyWh(customCab, 12_345, Instant.parse("2026-10-30T10:00:00Z"), true);
