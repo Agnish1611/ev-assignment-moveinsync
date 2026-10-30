@@ -11,11 +11,14 @@ import java.util.Objects;
  * @param plan candidate plan, including its seed and input hash
  * @param score objective of {@code plan}
  * @param deadlineExhausted true when the clock was already at or past the deadline
+ * @param flow preemptive charging relaxation and the contiguous session cost
  */
-public record SolveResult(FleetPlan plan, ObjectiveScore score, boolean deadlineExhausted) {
+public record SolveResult(
+    FleetPlan plan, ObjectiveScore score, boolean deadlineExhausted, FlowBound flow) {
 
   public SolveResult {
     Objects.requireNonNull(plan, "plan must not be null");
     Objects.requireNonNull(score, "score must not be null");
+    Objects.requireNonNull(flow, "flow must not be null");
   }
 }

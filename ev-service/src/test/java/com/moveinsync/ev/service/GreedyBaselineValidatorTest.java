@@ -154,6 +154,59 @@ class GreedyBaselineValidatorTest {
     assertValid(fleet, result.plan());
   }
 
+  @Test
+  void aLaterCheapWindowPassesTheValidator() {
+    PlannerInput fleet =
+        shell(1)
+            .addCab(cab("CAB-1", 12_000L, DEPOT))
+            .addTrip(
+                trip(
+                    "TRIP-C",
+                    START.plusSeconds(3_600),
+                    Location.of("LOC-P", "Pickup"),
+                    Location.of("LOC-D", "Drop")))
+            .addTariff(
+                new TariffSchedule(
+                    HubId.of("HUB-1"),
+                    List.of(
+                        new UtcTariffWindow(
+                            HubId.of("HUB-1"), START, START.plusSeconds(400), 200_000L),
+                        new UtcTariffWindow(
+                            HubId.of("HUB-1"), START.plusSeconds(400), END, 1_000L))))
+            .build();
+
+    SolveResult result = solver.solve(fleet, CONFIG, EARLY);
+
+    assertThat(result.plan().totalAssignedTrips()).isEqualTo(1);
+    assertThat(result.plan().totalChargingSessions()).isEqualTo(1);
+    assertThat(result.flow().achievedMicros()).isEqualTo(result.plan().totalChargingCostMicros());
+    assertThat(result.flow().relaxationMicros())
+        .isLessThanOrEqualTo(result.flow().achievedMicros());
+    assertValid(fleet, result.plan());
+  }
+
+  @Test
+  void heavyHubDemandPassesTheValidator() {
+    PlannerInput.Builder builder =
+        shell(2).addCharger(Charger.of(TENANT.value(), "CHG-2", "HUB-1", 50));
+    for (int index = 1; index <= 4; index++) {
+      builder.addCab(cab("CAB-" + index, 12_000L, DEPOT));
+      builder.addTrip(
+          trip(
+              "TRIP-" + index,
+              START.plusSeconds(700),
+              Location.of("LOC-P", "Pickup"),
+              Location.of("LOC-D", "Drop")));
+    }
+
+    PlannerInput fleet = builder.build();
+    SolveResult result = solver.solve(fleet, CONFIG, EARLY);
+
+    assertThat(result.plan().totalAssignedTrips()).isEqualTo(2);
+    assertThat(result.plan().totalChargingSessions()).isEqualTo(2);
+    assertValid(fleet, result.plan());
+  }
+
   private static void assertValid(PlannerInput fleet, FleetPlan plan) {
     ValidationReport report = new PlanValidator().validate(groundTruth(fleet), plan);
     assertThat(report.isValid()).as(report.toDetailedSummary()).isTrue();

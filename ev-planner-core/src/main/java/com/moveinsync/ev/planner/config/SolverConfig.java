@@ -32,6 +32,15 @@ public record SolverConfig(
   public static final long DEFAULT_CHANGE_PENALTY_MICROS = 1_000_000L;
   public static final int BASELINE_MAX_ITERATIONS = 0;
 
+  /** Outward slot width for the preemptive charging relaxation (D12). */
+  public static final int FLOW_SLOT_SECONDS = 60;
+
+  /** Contiguous start times tried per plug while sliding a session onto a cheaper tariff. */
+  public static final int FLOW_START_CAP = 48;
+
+  /** Plug-calendar jumps tried from one seed before the next seed. */
+  public static final int FLOW_RETRY_ATTEMPTS = 6;
+
   public SolverConfig {
     Objects.requireNonNull(deadline, "deadline must not be null");
     if (planningFloorPercent < MIN_PLANNING_FLOOR_PERCENT

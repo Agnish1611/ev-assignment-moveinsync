@@ -19,8 +19,10 @@ import java.util.Objects;
  * hub session fits before the pickup. Trips that still do not fit, and trips still open when the
  * deadline passes, go to backup.
  *
- * <p>Time O(T^2 · C · H · P) for T trips, C cabs, H hubs, and P plugs. Space O(T + C). The deadline
- * is polled before each insertion. A deadline that has already passed returns the backup plan.
+ * <p>Time O(T^2 · C · H · P) for T trips, C cabs, H hubs, and P plugs, plus one flow re-time of the
+ * finished assignments. Space O(T + C). The deadline is polled before each insertion. A deadline
+ * that has already passed returns the backup plan. After assignments are frozen, the flow re-timer
+ * may move a session onto a cheaper tariff.
  */
 public final class GreedyConstructionSolver implements FleetSolver {
 
@@ -42,8 +44,10 @@ public final class GreedyConstructionSolver implements FleetSolver {
     FleetPlan plan =
         PlanAssembler.assemble(
             input, "greedy-" + input.inputHash(), config.seed(), cursors, unassigned);
+    FlowRetimer.Retimed retimed = FlowRetimer.retime(input, plan, config, clock);
     ObjectiveScore score =
-        new ObjectiveScore(unassigned.size(), 0L, plan.totalChargingCostMicros());
-    return new SolveResult(plan, score, exhausted);
+        new ObjectiveScore(unassigned.size(), 0L, retimed.plan().totalChargingCostMicros());
+    return new SolveResult(
+        retimed.plan(), score, exhausted || retimed.deadlineExhausted(), retimed.bound());
   }
 }

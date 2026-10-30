@@ -23,7 +23,8 @@ import java.util.SplittableRandom;
  * {@value #TEMPERATURE_SCALE} and is multiplied by 9/10 each iteration. The best score seen is
  * returned. Time O(I · T^2 · C · H) for I iterations, T trips, C cabs, and H hubs. Space O(T + C).
  * The deadline is polled before construction and before every iteration. {@code maxIterations} of 0
- * returns construction unchanged.
+ * returns construction unchanged. The incumbent is retimed once after search, with assignments
+ * frozen.
  */
 public final class AlnsFleetSolver implements FleetSolver {
 
@@ -66,7 +67,7 @@ public final class AlnsFleetSolver implements FleetSolver {
     int temperature = INITIAL_TEMPERATURE;
     for (int iteration = 0; iteration < config.maxIterations(); iteration++) {
       if (!clock.instant().isBefore(config.deadline())) {
-        return new SolveResult(rename(best), bestScore, true);
+        return finish(input, config, clock, best, true);
       }
       int destroyIndex = roulette(destroyWeights, random);
       int repairIndex = roulette(repairWeights, random);
@@ -92,7 +93,17 @@ public final class AlnsFleetSolver implements FleetSolver {
       }
       temperature = temperature * 9 / 10;
     }
-    return new SolveResult(rename(best), bestScore, false);
+    return finish(input, config, clock, best, false);
+  }
+
+  private static SolveResult finish(
+      PlannerInput input, SolverConfig config, Clock clock, FleetPlan best, boolean exhausted) {
+    FlowRetimer.Retimed retimed = FlowRetimer.retime(input, best, config, clock);
+    return new SolveResult(
+        rename(retimed.plan()),
+        score(retimed.plan()),
+        exhausted || retimed.deadlineExhausted(),
+        retimed.bound());
   }
 
   private static boolean accept(

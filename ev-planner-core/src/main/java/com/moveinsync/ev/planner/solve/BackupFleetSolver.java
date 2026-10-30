@@ -58,7 +58,7 @@ public final class BackupFleetSolver implements FleetSolver, ReplanSolver {
     ObjectiveScore score =
         new ObjectiveScore(
             input.trips().size(), changedAssignments, plan.totalChargingCostMicros());
-    return new SolveResult(plan, score, deadlineExhausted);
+    return new SolveResult(plan, score, deadlineExhausted, new FlowBound(0L, 0L));
   }
 
   private static FleetPlan backupPlan(PlannerInput input, SolverConfig config) {
