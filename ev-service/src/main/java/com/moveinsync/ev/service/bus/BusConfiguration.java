@@ -1,10 +1,12 @@
 package com.moveinsync.ev.service.bus;
 
+import com.moveinsync.ev.service.api.ProcessRole;
 import com.moveinsync.ev.service.repository.OutboxRepository;
 import java.time.Clock;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
@@ -27,6 +29,7 @@ public class BusConfiguration {
     if (group.isBlank()) {
       throw new IllegalStateException("ev.bus.group is required");
     }
+    TopicLayout.require(bootstrap);
     KafkaMessageBus bus = new KafkaMessageBus(bootstrap, group, BusSettings.standard(), clock);
     bus.start();
     if (!registry.isBlank()) {
@@ -36,6 +39,7 @@ public class BusConfiguration {
   }
 
   @Bean
+  @ConditionalOnExpression(ProcessRole.WORKER)
   OutboxPump outboxPump(ObjectProvider<DataSource> sources, MessageBus bus) {
     return new OutboxPump(
         sources, new OutboxRelay(bus, new OutboxRepository(), BusSettings.standard()));

@@ -161,3 +161,13 @@ Regret insertion keeps the feasible cabs for each open trip. A commit that does 
 ### D34 — Bulk catalog
 
 `POST /v1/admin/hubs`, chargers, vehicles, trips, tariffs, and users accept one object or a JSON array on the same path. `ev.api.max-bulk-items` is 2,000 and `ev.api.max-body-bytes` is 2 MiB. A batch spends one `Idempotency-Key` and one rate-limit token. Each element is `STORED` or `QUARANTINED` with a stable code. The response carries opaque ids and codes, not coordinates or employee refs. A bad element rolls back to its savepoint, so the rest of the batch still commits. `catalog_version` increases once when at least one row is stored, and one `ev.config.v1` event is sent for that batch. Coordinates are written only to `fleet_location`. `FleetSeeder.eveningTrips()` is the 1,501-row body: 1,500 evening trips plus one finish that is before its start.
+
+### D35 — Worker login and required topics
+
+The web instances still connect as `ev_api`. That login can assume `ev_app` and cannot assume `ev_relay` or `ev_worker`. The outbox pump runs only in the worker process, which connects as `ev_worker`. `ev_worker` can assume `ev_app` and `ev_relay`, does not inherit those rights, and does not bypass row-level security. D28's sentence that the datasource user must be a member of both roles now applies to `ev_worker`, not to `ev_api`. If only the web instances are running, outbox rows wait until a worker starts. The worker has no JWT. It copies the tenant from the trigger envelope into `app.tenant`. The web process wrote that envelope from the token. Anyone who can publish to the trigger topic can name a tenant. The broker is not a public API. `detector` is an accepted role name and has no bean yet.
+
+`ev.roles` defaults to `api`. An unknown role stops startup. A second worker uses the compose profile `second-worker` and the group `ev-worker-2`.
+
+The broker does not auto-create topics. `deploy/kafka/create-topics.sh` creates the five base topics and each topic's `.retry.5s`, `.retry.1m`, and `.dlq` before the processes start. Dev uses 6 partitions and replication factor 1. Production is replication factor 3 with `min.insync.replicas=2`. The process calls `TopicLayout.require` before the bus starts and throws if a name is missing. The first missing name on an empty broker is `ev.plan-triggers.v1`.
+
+`SeenSequences` keeps at most `ev.bus` `seenProducers` pairs, default 10,000. Committing a higher sequence moves that pair to the newest slot. Past the cap, the oldest pair is dropped. A later event for a dropped pair is treated as new, so a replay of an evicted producer can be accepted.

@@ -9,6 +9,7 @@ flowchart LR
   keycloak[Keycloak realm ev]
   app1[app-1]
   app2[app-2]
+  worker[ev-worker]
   postgres[(Postgres)]
   kafka[Kafka KRaft]
   registry[Schema Registry]
@@ -18,23 +19,25 @@ flowchart LR
   keycloak --> app2
   app1 --> postgres
   app2 --> postgres
+  worker --> postgres
   app1 --> kafka
   app2 --> kafka
+  worker --> kafka
   kafka --> registry
   app1 --> prometheus
   app2 --> prometheus
   prometheus --> grafana
 ```
 
-`ev_admin` owns the tables and runs Flyway, including the `ev_api` login. The application then connects as `ev_api`. That role is not a superuser and does not inherit table rights. Each request does `SET ROLE ev_app` and sets `app.tenant` from the token. The outbox pump does `SET ROLE ev_relay`. Postgres row-level security still applies.
+`ev_admin` owns the tables and runs Flyway, including the `ev_api` and `ev_worker` logins. The web instances connect as `ev_api`. That role is not a superuser, does not inherit table rights, and cannot assume `ev_relay`. Each request does `SET ROLE ev_app` and sets `app.tenant` from the token. The worker connects as `ev_worker` and is the only process that relays the outbox. It has no token. It copies the tenant from the trigger envelope, which the web process wrote from the token. Postgres row-level security still applies. Outbox rows wait if no worker is running.
 
-Each instance has its own Kafka consumer group, `ev-web-1` and `ev-web-2`, so a plan-published event reaches both caches. A shared group would deliver the event to only one of them. The compose broker uses replication factor 1. Production is replication factor 3 with `min.insync.replicas=2`.
+Each web instance has its own Kafka consumer group, `ev-web-1` and `ev-web-2`, so a plan-published event reaches both caches. A shared group would deliver the event to only one of them. Topics are created before the processes start, and auto-create is off. A missing topic stops the process. The compose broker uses replication factor 1. Production is replication factor 3 with `min.insync.replicas=2`.
 
 Keycloak realm `ev` puts `tenant_id` and `role` on the access token. The application checks the signature against the realm JWKS and does not trust a tenant in the request body. `POST /v1/plans` records an accepted job and does not publish a head.
 
 ## Battery-drift re-plan
 
-This is the solver path. The two compose processes do not host it. A battery post returns 202 and leaves the envelope on `plan-triggers`. The worker below is what `WorkerCrashTest`, `DriftStormTest`, and `PlanPublication` run.
+This is the solver path. The compose worker relays the outbox and does not run this ladder yet. A battery post returns 202 and leaves the envelope on `plan-triggers`. The worker below is what `WorkerCrashTest`, `DriftStormTest`, and `PlanPublication` run.
 
 ```mermaid
 sequenceDiagram

@@ -8,9 +8,9 @@ Assigns a shift of trips to electric cabs, inserts charging stops on a two-segme
 docker compose up --build
 ```
 
-That starts two application instances, Postgres, Kafka in KRaft mode, Schema Registry, Keycloak, Prometheus, and Grafana. Passwords in `docker-compose.yml` and the Keycloak realm are local defaults. The application connects as `ev_api`, which is not a superuser. Flyway runs as `ev_admin` before that connection opens.
+That starts two web instances, one worker, Postgres, Kafka in KRaft mode, Schema Registry, Keycloak, Prometheus, and Grafana. Passwords in `docker-compose.yml` and the Keycloak realm are local defaults. The web instances connect as `ev_api`, which is not a superuser and cannot relay the outbox. The worker connects as `ev_worker`. Flyway runs as `ev_admin` on the web instances before those connections open. Topics are created before the processes start, and the broker does not auto-create them. A second worker uses the compose profile `second-worker` and the consumer group `ev-worker-2`.
 
-The compose broker uses replication factor 1. Production is replication factor 3 with `min.insync.replicas=2`.
+The compose broker uses 6 partitions and replication factor 1. Production is replication factor 3 with `min.insync.replicas=2`.
 
 | Port | What |
 |---|---|
@@ -20,7 +20,7 @@ The compose broker uses replication factor 1. Production is replication factor 3
 | 8085 | Schema Registry |
 | 3001 | Grafana. User `admin`, password `admin`. Anonymous viewers can open the dashboard. |
 | 9090 | Prometheus |
-| 5433 | Postgres. Migration user `ev_admin`, application user `ev_api`, password `ev_password`. |
+| 5433 | Postgres. Migration user `ev_admin`, web user `ev_api`, worker user `ev_worker`, password `ev_password`. |
 
 Keycloak users `operator`, `employee`, `admin`, and `device` each use that same word as the password. All four are in tenant `tenant-a`. The client is `ev-api`. The walkthrough is [docs/DEMO.md](docs/DEMO.md). The short design note is [docs/DESIGN_NOTE.md](docs/DESIGN_NOTE.md). The full design is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). A Postman collection is `deploy/postman/ev-fleet.postman_collection.json`.
 

@@ -13,6 +13,7 @@ package com.moveinsync.ev.service.bus;
  * @param pollMillis poll wait while a partition is paused
  * @param sendTimeoutMillis producer ack wait
  * @param outboxBatch rows claimed per relay poll
+ * @param seenProducers bound on remembered producer sequences
  */
 public record BusSettings(
     int solveThreads,
@@ -23,10 +24,11 @@ public record BusSettings(
     long retryLongSeconds,
     long pollMillis,
     long sendTimeoutMillis,
-    int outboxBatch) {
+    int outboxBatch,
+    int seenProducers) {
 
   public BusSettings {
-    if (solveThreads <= 0 || solveQueue <= 0 || outboxBatch <= 0) {
+    if (solveThreads <= 0 || solveQueue <= 0 || outboxBatch <= 0 || seenProducers <= 0) {
       throw new IllegalArgumentException("pool sizes must be positive");
     }
     if (retryShortSeconds <= 0L || retryLongSeconds <= 0L) {
@@ -41,6 +43,6 @@ public record BusSettings(
   }
 
   public static BusSettings standard() {
-    return new BusSettings(2, 8, 120_000L, 30_000L, 5L, 60L, 200L, 10_000L, 8);
+    return new BusSettings(2, 8, 120_000L, 30_000L, 5L, 60L, 200L, 10_000L, 8, 10_000);
   }
 }

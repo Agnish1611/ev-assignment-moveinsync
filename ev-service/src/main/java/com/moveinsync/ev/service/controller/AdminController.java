@@ -12,6 +12,8 @@ import com.moveinsync.ev.service.api.ApiSettings;
 import com.moveinsync.ev.service.api.CallerResolver;
 import com.moveinsync.ev.service.api.CatalogPayload;
 import com.moveinsync.ev.service.api.CatalogService;
+import com.moveinsync.ev.service.api.ProcessRole;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/v1/admin")
 @ConditionalOnWebApplication
+@ConditionalOnExpression(ProcessRole.API)
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
 

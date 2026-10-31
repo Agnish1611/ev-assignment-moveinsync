@@ -6,6 +6,8 @@ import com.moveinsync.ev.service.api.ApiModels.ChargerFailRequest;
 import com.moveinsync.ev.service.api.ApiModels.ReplanRequest;
 import com.moveinsync.ev.service.api.CallerResolver;
 import com.moveinsync.ev.service.api.IngressService;
+import com.moveinsync.ev.service.api.ProcessRole;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Operational events. The controller does not solve. */
 @RestController
 @ConditionalOnWebApplication
+@ConditionalOnExpression(ProcessRole.API)
 public class EventController {
 
   private final CallerResolver callers;

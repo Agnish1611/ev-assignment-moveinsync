@@ -18,6 +18,7 @@ import java.time.Clock;
 import javax.sql.DataSource;
 import org.postgresql.ds.PGSimpleDataSource;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -28,7 +29,7 @@ import org.springframework.core.env.Environment;
 /** Wires the HTTP API. A process without a web server does not create these beans. */
 @Configuration
 @ConditionalOnWebApplication
-@EnableConfigurationProperties({ApiSettings.class, CacheSettings.class})
+@EnableConfigurationProperties({ApiSettings.class, CacheSettings.class, RoleSettings.class})
 public class ApiConfiguration {
 
   @Bean
@@ -102,17 +103,20 @@ public class ApiConfiguration {
   }
 
   @Bean
+  @ConditionalOnExpression(ProcessRole.API)
   PlanJobs planJobs(IdempotentCalls calls, Clock clock, ApiSettings settings) {
     return new PlanJobs(calls, new JobRepository(), clock, settings.maxIdLength());
   }
 
   @Bean
+  @ConditionalOnExpression(ProcessRole.API)
   CatalogService catalogService(
       IdempotentCalls calls, ApiSettings settings, MessageBus bus, Clock clock) {
     return new CatalogService(calls, new CatalogRepository(), settings, bus, clock);
   }
 
   @Bean
+  @ConditionalOnExpression(ProcessRole.API)
   IngressService ingressService(
       IdempotentCalls calls, MessageBus bus, Clock clock, ApiSettings settings) {
     return new IngressService(calls, bus, clock, settings.maxIdLength());

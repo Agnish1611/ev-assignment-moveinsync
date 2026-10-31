@@ -133,7 +133,7 @@ class DeliveryTest {
 
     assertThat(settings.maxPollIntervalMillis()).isGreaterThan(settings.longestSolveMillis());
     assertThat(settings.longestSolveMillis()).isGreaterThanOrEqualTo(30_000L);
-    assertThatThrownBy(() -> new BusSettings(1, 1, 30_000L, 30_000L, 5L, 60L, 200L, 10_000L, 8))
+    assertThatThrownBy(() -> new BusSettings(1, 1, 30_000L, 30_000L, 5L, 60L, 200L, 10_000L, 8, 1))
         .isInstanceOf(IllegalArgumentException.class);
   }
 

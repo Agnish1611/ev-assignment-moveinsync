@@ -10,7 +10,9 @@ import com.moveinsync.ev.service.api.ApiModels.UnassignedView;
 import com.moveinsync.ev.service.api.CallerResolver;
 import com.moveinsync.ev.service.api.PlanJobs;
 import com.moveinsync.ev.service.api.PlanQuery;
+import com.moveinsync.ev.service.api.ProcessRole;
 import java.util.List;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/v1")
 @ConditionalOnWebApplication
+@ConditionalOnExpression(ProcessRole.API)
 public class PlanController {
 
   private final CallerResolver callers;

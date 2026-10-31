@@ -1,6 +1,6 @@
 # Dev-only passwords. Production replaces them.
 # The broker uses replication factor 1. Production is 3 with min.insync.replicas=2.
-# ev_admin owns the schema. The application connects as ev_api, which is not a superuser.
+# ev_admin owns the schema. Web instances connect as ev_api. The worker connects as ev_worker.
 
 x-app-environment: &app-environment
   SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ev_fleet
@@ -11,6 +11,7 @@ x-app-environment: &app-environment
   EV_SCHEMA_ADMIN_PASSWORD: ev_password
   SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/ev/protocol/openid-connect/certs
   EV_BUS_BOOTSTRAP: kafka:9092
+  EV_ROLES: api
   EV_SCHEMA_REGISTRY: http://schema-registry:8081
   EV_BUS_RELAY_MILLIS: "1000"
 
@@ -19,6 +20,8 @@ x-app-depends: &app-depends
     condition: service_healthy
   kafka:
     condition: service_healthy
+  kafka-init:
+    condition: service_completed_successfully
   schema-registry:
     condition: service_healthy
   keycloak:
@@ -62,7 +65,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_NUM_PARTITIONS: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list"]
@@ -70,6 +73,16 @@ services:
       timeout: 10s
       retries: 12
       start_period: 15s
+
+  kafka-init:
+    image: apache/kafka:3.8.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./deploy/kafka/create-topics.sh:/create-topics.sh:ro
+    entrypoint: ["/bin/sh", "/create-topics.sh"]
+    restart: "no"
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.7.1
@@ -178,6 +191,41 @@ services:
       EV_BUS_GROUP: ev-web-2
     ports:
       - "8081:8080"
+    depends_on: *app-depends
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
+
+  ev-worker:
+    image: ev-fleet:local
+    environment:
+      <<: *app-environment
+      EV_SCHEMA_MIGRATE: "false"
+      SPRING_DATASOURCE_USERNAME: ev_worker
+      EV_ROLES: worker,detector
+      EV_BUS_GROUP: ev-worker
+    depends_on: *app-depends
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
+
+  ev-worker-2:
+    profiles: ["second-worker"]
+    image: ev-fleet:local
+    environment:
+      <<: *app-environment
+      EV_SCHEMA_MIGRATE: "false"
+      SPRING_DATASOURCE_USERNAME: ev_worker
+      EV_ROLES: worker,detector
+      EV_BUS_GROUP: ev-worker-2
     depends_on: *app-depends
     restart: on-failure
     healthcheck:

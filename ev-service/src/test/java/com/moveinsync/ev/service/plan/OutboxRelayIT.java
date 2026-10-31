@@ -27,7 +27,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.kafka.KafkaContainer;
 
 /** A published plan leaves the outbox once. Another tenant cannot see the row. */
 class OutboxRelayIT {
@@ -43,35 +42,32 @@ class OutboxRelayIT {
     assertThat(countWithoutTenant()).isZero();
     assertThat(countAs("ev_relay", "")).isPositive();
 
-    BusSettings settings = new BusSettings(2, 8, 120_000L, 30_000L, 5L, 60L, 200L, 10_000L, 100);
-    try (KafkaContainer kafka = new KafkaContainer("apache/kafka-native:3.8.0")) {
-      kafka.start();
-      KafkaMessageBus bus =
-          new KafkaMessageBus(kafka.getBootstrapServers(), "relay-it", settings, Clock.systemUTC());
-      PlanProjection projection = new PlanProjection();
-      CountDownLatch seen = new CountDownLatch(1);
-      bus.subscribe(
-          Topics.PLAN_EVENTS,
-          (BusRecord record, Runnable ack) -> {
-            projection.observe(EnvelopeCodec.read(record.value()));
-            if (projection.version(SHARD) == 1L) {
-              seen.countDown();
-            }
-            ack.run();
-          });
-      bus.start();
-      try {
-        OutboxRelay relay = new OutboxRelay(bus, new OutboxRepository(), settings);
-        assertThat(relay.publishPending(dataSource)).isPositive();
-        assertThat(seen.await(60, TimeUnit.SECONDS)).isTrue();
-        assertThat(projection.version(SHARD)).isEqualTo(1L);
-        assertThat(PlanDatabase.count("SELECT count(*) FROM outbox WHERE shard = ?", SHARD))
-            .isZero();
-        assertThat(relay.publishPending(dataSource)).isZero();
-        assertThat(bus.failure()).isEmpty();
-      } finally {
-        bus.close();
-      }
+    BusSettings settings =
+        new BusSettings(2, 8, 120_000L, 30_000L, 5L, 60L, 200L, 10_000L, 100, 10);
+    KafkaMessageBus bus =
+        new KafkaMessageBus(KafkaBrokers.ready(), "relay-it", settings, Clock.systemUTC());
+    PlanProjection projection = new PlanProjection();
+    CountDownLatch seen = new CountDownLatch(1);
+    bus.subscribe(
+        Topics.PLAN_EVENTS,
+        (BusRecord record, Runnable ack) -> {
+          projection.observe(EnvelopeCodec.read(record.value()));
+          if (projection.version(SHARD) == 1L) {
+            seen.countDown();
+          }
+          ack.run();
+        });
+    bus.start();
+    try {
+      OutboxRelay relay = new OutboxRelay(bus, new OutboxRepository(), settings);
+      assertThat(relay.publishPending(dataSource)).isPositive();
+      assertThat(seen.await(60, TimeUnit.SECONDS)).isTrue();
+      assertThat(projection.version(SHARD)).isEqualTo(1L);
+      assertThat(PlanDatabase.count("SELECT count(*) FROM outbox WHERE shard = ?", SHARD)).isZero();
+      assertThat(relay.publishPending(dataSource)).isZero();
+      assertThat(bus.failure()).isEmpty();
+    } finally {
+      bus.close();
     }
   }
 
