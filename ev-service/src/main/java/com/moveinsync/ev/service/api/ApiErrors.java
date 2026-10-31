@@ -2,6 +2,7 @@ package com.moveinsync.ev.service.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -23,7 +24,8 @@ public class ApiErrors {
 
   @ExceptionHandler(ApiException.class)
   public ResponseEntity<Problem> api(ApiException failure, HttpServletRequest request) {
-    return problem(failure.status(), failure.code(), failure.title(), request);
+    return problem(
+        failure.status(), failure.code(), failure.title(), failure.retryAfterSeconds(), request);
   }
 
   @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -52,11 +54,20 @@ public class ApiErrors {
 
   private ResponseEntity<Problem> problem(
       int status, String code, String title, HttpServletRequest request) {
+    return problem(status, code, title, 0, request);
+  }
+
+  private ResponseEntity<Problem> problem(
+      int status, String code, String title, int retryAfterSeconds, HttpServletRequest request) {
     String correlation = Correlation.resolve(request);
     Problem body = new Problem("about:blank", title, status, code, correlation);
-    return ResponseEntity.status(status)
-        .contentType(MediaType.parseMediaType("application/problem+json"))
-        .header(Correlation.HEADER, correlation)
-        .body(body);
+    ResponseEntity.BodyBuilder response =
+        ResponseEntity.status(status)
+            .contentType(MediaType.parseMediaType("application/problem+json"))
+            .header(Correlation.HEADER, correlation);
+    if (retryAfterSeconds > 0) {
+      response.header(HttpHeaders.RETRY_AFTER, Integer.toString(retryAfterSeconds));
+    }
+    return response.body(body);
   }
 }

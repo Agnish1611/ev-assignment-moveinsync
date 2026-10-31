@@ -106,4 +106,4 @@ docker start ev-app-1
 
 `app-2` stays up and accepts the vehicle. `app-1` is the instance that stopped. Start it again when the demo is done.
 
-The solver failure is not this stop. `WorkerCrashTest` kills a solve before the sequence is committed. The replacement finishes that sequence, and the head moves once.
+The solver failure is not this stop. `WorkerCrashTest` kills a solve before the sequence is committed. The replacement finishes that sequence, and the head moves once. A database the process cannot reach makes readiness fail, and writes return 503 with `Retry-After`. A cached head is still served.

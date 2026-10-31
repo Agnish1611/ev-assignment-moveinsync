@@ -8,6 +8,8 @@ import com.moveinsync.ev.service.cache.CacheInvalidator;
 import com.moveinsync.ev.service.cache.CacheSettings;
 import com.moveinsync.ev.service.cache.PlanCaches;
 import com.moveinsync.ev.service.cache.PlanReadCache;
+import com.moveinsync.ev.service.fault.CallGate;
+import com.moveinsync.ev.service.fault.ResilienceSettings;
 import com.moveinsync.ev.service.fleet.FleetLoad;
 import com.moveinsync.ev.service.observe.ServiceMeters;
 import com.moveinsync.ev.service.plan.JobReaper;
@@ -41,12 +43,13 @@ import org.springframework.core.env.Environment;
   ApiSettings.class,
   CacheSettings.class,
   RoleSettings.class,
-  JobSettings.class
+  JobSettings.class,
+  ResilienceSettings.class
 })
 public class ApiConfiguration {
 
   @Bean
-  DataSource dataSource(Environment environment) {
+  DataSource dataSource(Environment environment, ResilienceSettings resilience) {
     String url = environment.getRequiredProperty("spring.datasource.url");
     String username = environment.getRequiredProperty("spring.datasource.username");
     String password = environment.getRequiredProperty("spring.datasource.password");
@@ -60,7 +63,19 @@ public class ApiConfiguration {
     source.setURL(url);
     source.setUser(username);
     source.setPassword(password);
+    source.setConnectTimeout(resilience.connectTimeoutSeconds());
+    source.setSocketTimeout(resilience.socketTimeoutSeconds());
     return source;
+  }
+
+  @Bean
+  CallGate databaseGate(ResilienceSettings resilience, Clock clock) {
+    return new CallGate(resilience.failureLimit(), resilience.openMillis(), clock);
+  }
+
+  private static AppConnections connections(
+      ObjectProvider<DataSource> sources, CallGate gate, ResilienceSettings resilience) {
+    return new AppConnections(sources, gate, resilience.retryAfterSeconds());
   }
 
   @Bean
@@ -103,16 +118,30 @@ public class ApiConfiguration {
 
   @Bean
   PlanQuery planQuery(
-      ObjectProvider<DataSource> sources, ApiSettings settings, PlanReadCache cache) {
+      ObjectProvider<DataSource> sources,
+      ApiSettings settings,
+      PlanReadCache cache,
+      CallGate databaseGate,
+      ResilienceSettings resilience) {
     return new PlanQuery(
-        new AppConnections(sources), new PlanViewRepository(), cache, settings.maxIdLength());
+        connections(sources, databaseGate, resilience),
+        new PlanViewRepository(),
+        cache,
+        settings.maxIdLength());
   }
 
   @Bean
   IdempotentCalls idempotentCalls(
-      ObjectProvider<DataSource> sources, Clock clock, ApiSettings settings) {
+      ObjectProvider<DataSource> sources,
+      Clock clock,
+      ApiSettings settings,
+      CallGate databaseGate,
+      ResilienceSettings resilience) {
     return new IdempotentCalls(
-        new AppConnections(sources), new IdempotencyRepository(), clock, settings.maxIdLength());
+        connections(sources, databaseGate, resilience),
+        new IdempotencyRepository(),
+        clock,
+        settings.maxIdLength());
   }
 
   @Bean
@@ -121,8 +150,11 @@ public class ApiConfiguration {
       IdempotentCalls calls,
       ObjectProvider<DataSource> sources,
       Clock clock,
-      ApiSettings settings) {
-    return new PlanJobs(calls, new AppConnections(sources), clock, settings.maxIdLength());
+      ApiSettings settings,
+      CallGate databaseGate,
+      ResilienceSettings resilience) {
+    return new PlanJobs(
+        calls, connections(sources, databaseGate, resilience), clock, settings.maxIdLength());
   }
 
   @Bean

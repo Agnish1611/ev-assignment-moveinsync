@@ -68,17 +68,17 @@ The objective is fewer backup trips, then the change penalty times the number of
 
 | What fails | What the user sees | How it recovers |
 |---|---|---|
-| Solver killed mid-solve | The previous head | The sequence is stored only after the handler returns. The short retry topic delivers it to the replacement |
+| Solver killed mid-solve | The previous head | The sequence is stored only after the handler returns. `SolveKillTest` kills the solve before the write. `ZombieWorkerIT` pauses one worker; the other publishes, and the paused worker's later write loses compare-and-set |
 | Deadline during a drift batch | The last validator-clean plan | The batch stops. The next event can repair again |
 | Validator rejects the candidate | The previous head | Nothing is published. The seed on a stored version is what makes a past run reproducible |
 | Duplicate or older message | No second change | The delivery watermark keeps the highest sequence |
 | Poison payload | No change | Retry topics, then the dead-letter topic |
-| Database connection drops during publish | `STORE_FAILED`, no SQL in the body | The head stays on the last committed version |
-| Database down on a cached read | The cached version, while it is inside its lifetime | The current-head pointer expires after 2 seconds. A published version stays until it is evicted by size or by a plan event |
+| Database unreachable on a write or a cache miss | 503 `UNAVAILABLE` with `Retry-After`. Readiness is down | The call waits at most the connect timeout, then the gate opens. A cached current head is still served inside its lifetime |
+| Database drops during publish | The last committed head | The transaction rolls back. No partial version is stored |
 | One web instance stops | The other instance | Both serve health, reads, and catalog writes. Killing one is the live failover |
-| Kafka down | A battery post fails. A plan post is stored. A head already stored is still readable | The outbox keeps the plan trigger until the relay can send |
+| Kafka down | A battery post waits for the send bound, then 503. A plan post is stored. A head already stored is still readable | The outbox keeps the trigger until the broker accepts it |
 | Cross-tenant read | 404 | The tenant comes from the token. Row-level security compares it again |
 
 ## Left out
 
-The web process does not assemble a fleet from the admin tables, so it does not start the ladder. The worker does that for a plan job and for a battery or charger-failure trigger. There is no circuit breaker and no `Retry-After` on a database failure. The response is `STORE_FAILED`. Traces stay in the process. There is no collector. The distance cache is not passed into the solver. Compose is the deployment. There is no Kubernetes manifest and no second region. There is no learned consumption model, no external routing engine, and no Debezium connector. The outbox pump publishes rows a worker has already committed.
+The web process does not assemble a fleet from the admin tables, so it does not start the ladder. The worker does that for a plan job and for a battery or charger-failure trigger. A database the process cannot reach returns 503 `UNAVAILABLE` with `Retry-After` after the connect timeout. Further calls fail immediately until the gate allows one probe. Traces stay in the process. There is no collector. The distance cache is not passed into the solver. Compose is the deployment. There is no Kubernetes manifest and no second region. There is no learned consumption model, no external routing engine, and no Debezium connector. The outbox pump publishes rows a worker has already committed.

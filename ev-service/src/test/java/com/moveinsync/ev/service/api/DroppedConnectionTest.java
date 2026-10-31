@@ -3,8 +3,10 @@ package com.moveinsync.ev.service.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.moveinsync.ev.service.fault.CallGate;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Clock;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -14,16 +16,19 @@ class DroppedConnectionTest {
 
   @Test
   void aDroppedConnectionReturnsStoreFailedWithoutSql() {
-    AppConnections connections = new AppConnections(new OneSource(new ClosedDatabase()));
+    AppConnections connections =
+        new AppConnections(
+            new OneSource(new ClosedDatabase()), new CallGate(3, 5_000L, Clock.systemUTC()), 2);
 
     assertThatThrownBy(() -> connections.read("tenant-a", connection -> "ok"))
         .isInstanceOf(ApiException.class)
         .satisfies(
             thrown -> {
               ApiException error = (ApiException) thrown;
-              assertThat(error.status()).isEqualTo(500);
-              assertThat(error.code()).isEqualTo("STORE_FAILED");
-              assertThat(error.title()).isEqualTo("The request could not be stored");
+              assertThat(error.status()).isEqualTo(503);
+              assertThat(error.code()).isEqualTo("UNAVAILABLE");
+              assertThat(error.title()).isEqualTo("The service is not ready");
+              assertThat(error.retryAfterSeconds()).isEqualTo(2);
               assertThat(error.getMessage()).doesNotContain("db.internal");
               assertThat(error.getCause()).isNull();
             });

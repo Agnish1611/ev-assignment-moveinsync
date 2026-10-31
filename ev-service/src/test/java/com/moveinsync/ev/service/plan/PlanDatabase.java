@@ -8,6 +8,7 @@ import java.sql.Statement;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.postgresql.ds.PGSimpleDataSource;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /** One Postgres database for the publication tests. The container stops when the JVM exits. */
@@ -56,6 +57,18 @@ final class PlanDatabase {
   static String databasePassword() {
     open();
     return databasePassword;
+  }
+
+  static synchronized void pause() {
+    open();
+    DockerClientFactory.instance().client().pauseContainerCmd(postgres.getContainerId()).exec();
+  }
+
+  static synchronized void resume() {
+    if (postgres == null) {
+      return;
+    }
+    DockerClientFactory.instance().client().unpauseContainerCmd(postgres.getContainerId()).exec();
   }
 
   static long count(String sql, Object... args) {

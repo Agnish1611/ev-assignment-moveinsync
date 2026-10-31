@@ -77,7 +77,7 @@ A published plan version is cached by tenant, shard, and version. It has no expi
 | Per-cab timeline with charge at each step | `CabTimelineTest`, `HttpAccessIT` |
 | 300 cabs, 40 chargers, 1,500 trips in under 30 seconds | `BenchmarkScenarioTest`, `docs/reports/PLANNER_300CAB_REPORT.md`, `docs/reports/VALIDATION_300CAB_REPORT.md` |
 | Two writers on one shard | `PlanPublicationIT.twoWritersCannotBothAdvanceTheHead` |
-| Kill mid-solve, duplicate, reorder, poison, dropped database | `WorkerCrashTest`, `DeliveryTest`, `ConnectionDropIT` |
+| Kill mid-solve, duplicate, reorder, poison, dropped database, paused broker, paused worker | `WorkerCrashTest`, `SolveKillTest`, `CommitKillTest`, `DeliveryTest`, `ConnectionDropIT`, `StoreOutageIT`, `KafkaOutageIT`, `ZombieWorkerIT` |
 | One hundred cabs drifting together | `DriftStormTest` |
 | Tenant isolation and roles | `PlanTenancyIT`, `HttpAccessIT` |
 
@@ -93,4 +93,4 @@ Measured on an Apple M4 (10 cores, 16 GB, Darwin arm64) with Temurin 21.0.13+9-L
 | JMH charge duration across the 80 percent knee | 1.908 ± 0.132 ns/op |
 | k6, 10 users, 15 s, `GET /actuator/health` | 12,401.5 req/s, p50 684.12 µs, p99 1.7 ms, 186,023 responses, none failed |
 
-Construction is O(T² · C · H · P) time when every accepted trip books a plug, and O(T · C) space for the regret table. A commit that does not book a plug re-probes only that cab. T is trips, C is cabs, H is hubs, and P is plugs. The lower bound is O(T · C · H + T log T) time and O(T) space. A single construction of the case-study fleet, 300 cabs, 40 chargers, and 1,500 trips, took 2.710 s. No larger fleet was measured. Worst-case time still applies when every accepted trip books a plug. This fleet does not. The k6 figure is the public health scrape, with database health turned off. It is not a plan publish. The validator on that same 300-cab plan is 3.290 ms at p50 and 5.113 ms at p99 (`docs/reports/VALIDATION_300CAB_REPORT.md`).
+Construction is O(T² · C · H · P) time when every accepted trip books a plug, and O(T · C) space for the regret table. A commit that does not book a plug re-probes only that cab. T is trips, C is cabs, H is hubs, and P is plugs. The lower bound is O(T · C · H + T log T) time and O(T) space. A single construction of the case-study fleet, 300 cabs, 40 chargers, and 1,500 trips, took 2.710 s. No larger fleet was measured. Worst-case time still applies when every accepted trip books a plug. This fleet does not. The published k6 figure was taken before readiness checked the database. It is not a plan publish. The validator on that same 300-cab plan is 3.290 ms at p50 and 5.113 ms at p99 (`docs/reports/VALIDATION_300CAB_REPORT.md`).

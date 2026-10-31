@@ -1,6 +1,7 @@
 package com.moveinsync.ev.service.bus;
 
 import com.moveinsync.ev.service.api.ProcessRole;
+import com.moveinsync.ev.service.fault.ResilienceSettings;
 import com.moveinsync.ev.service.repository.OutboxRepository;
 import java.time.Clock;
 import javax.sql.DataSource;
@@ -25,12 +26,14 @@ public class BusConfiguration {
       @Value("${ev.bus.bootstrap}") String bootstrap,
       @Value("${ev.bus.group}") String group,
       @Value("${ev.schema.registry:}") String registry,
-      Clock clock) {
+      Clock clock,
+      ResilienceSettings resilience) {
     if (group.isBlank()) {
       throw new IllegalStateException("ev.bus.group is required");
     }
     TopicLayout.require(bootstrap);
-    KafkaMessageBus bus = new KafkaMessageBus(bootstrap, group, BusSettings.standard(), clock);
+    KafkaMessageBus bus =
+        new KafkaMessageBus(bootstrap, group, BusSettings.standard(), clock, resilience);
     bus.start();
     if (!registry.isBlank()) {
       new SchemaPublisher().publish(registry);

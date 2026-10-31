@@ -1,5 +1,8 @@
 package com.moveinsync.ev.service.bus;
 
+import com.moveinsync.ev.service.fault.CallBlocked;
+import com.moveinsync.ev.service.fault.CallGate;
+import com.moveinsync.ev.service.fault.ResilienceSettings;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
@@ -22,13 +25,28 @@ public final class KafkaMessageBus implements MessageBus {
   private final KafkaProducer<String, byte[]> producer;
   private final KafkaPoller poller;
   private final BusSettings settings;
+  private final CallGate gate;
+  private final long sendWaitMillis;
 
   public KafkaMessageBus(String bootstrap, String groupId, BusSettings settings, Clock clock) {
+    this(bootstrap, groupId, settings, clock, ResilienceSettings.standard());
+  }
+
+  public KafkaMessageBus(
+      String bootstrap,
+      String groupId,
+      BusSettings settings,
+      Clock clock,
+      ResilienceSettings resilience) {
     this.settings = Objects.requireNonNull(settings, "settings must not be null");
     Objects.requireNonNull(clock, "clock must not be null");
-    this.producer = KafkaClients.producer(bootstrap);
+    Objects.requireNonNull(resilience, "resilience must not be null");
+    this.gate = new CallGate(resilience.failureLimit(), resilience.openMillis(), clock);
+    this.sendWaitMillis = resilience.deliveryTimeoutMillis();
+    this.producer = KafkaClients.producer(bootstrap, resilience);
     this.poller =
-        new KafkaPoller(KafkaClients.consumer(bootstrap, groupId, settings), settings, clock);
+        new KafkaPoller(
+            KafkaClients.consumer(bootstrap, groupId, settings, resilience), settings, clock);
   }
 
   public void start() {
@@ -41,17 +59,25 @@ public final class KafkaMessageBus implements MessageBus {
 
   @Override
   public void send(BusRecord record) {
+    try {
+      gate.enter();
+    } catch (CallBlocked ex) {
+      throw new BusException("send failed", ex);
+    }
     ProducerRecord<String, byte[]> produced =
         new ProducerRecord<>(record.topic(), record.key(), record.value());
     for (Map.Entry<String, String> header : record.headers().entrySet()) {
       produced.headers().add(header.getKey(), header.getValue().getBytes(StandardCharsets.UTF_8));
     }
     try {
-      producer.send(produced).get(settings.sendTimeoutMillis(), TimeUnit.MILLISECONDS);
+      producer.send(produced).get(sendWaitMillis, TimeUnit.MILLISECONDS);
+      gate.success();
     } catch (InterruptedException ex) {
       Thread.currentThread().interrupt();
+      gate.failure();
       throw new BusException("send interrupted", ex);
     } catch (ExecutionException | TimeoutException ex) {
+      gate.failure();
       throw new BusException("send failed", ex);
     }
   }
