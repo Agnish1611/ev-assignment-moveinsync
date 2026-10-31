@@ -1,6 +1,6 @@
 # Design note
 
-Two web instances serve one fleet database. A plan becomes the head only after an independent validator accepts it. The packaged processes accept events and serve reads. They do not run the solver.
+Two web instances serve one fleet database. A plan becomes the head only after an independent validator accepts it. The web processes accept events and serve reads. The worker solves a plan job.
 
 ## Deployment
 
@@ -33,11 +33,11 @@ flowchart LR
 
 Each web instance has its own Kafka consumer group, `ev-web-1` and `ev-web-2`, so a plan-published event reaches both caches. A shared group would deliver the event to only one of them. Topics are created before the processes start, and auto-create is off. A missing topic stops the process. The compose broker uses replication factor 1. Production is replication factor 3 with `min.insync.replicas=2`.
 
-Keycloak realm `ev` puts `tenant_id` and `role` on the access token. The application checks the signature against the realm JWKS and does not trust a tenant in the request body. `POST /v1/plans` records an accepted job and a trigger in one transaction. It does not publish a head. `GET /v1/plans/jobs/{jobId}` returns that job for the token tenant.
+Keycloak realm `ev` puts `tenant_id` and `role` on the access token. The application checks the signature against the realm JWKS and does not trust a tenant in the request body. `POST /v1/plans` records an accepted job and a trigger in one transaction. It does not publish a head. The worker reads that trigger, solves the shard, and publishes only after the validator accepts a freshly loaded fleet. `GET /v1/plans/jobs/{jobId}` returns that job for the token tenant.
 
 ## Battery-drift re-plan
 
-This is the solver path. The compose worker relays the outbox and does not run this ladder yet. A battery post returns 202 and leaves the envelope on `plan-triggers`. The worker below is what `WorkerCrashTest`, `DriftStormTest`, and `PlanPublication` run.
+This is the drift path. A battery post returns 202 and leaves a drift envelope on `plan-triggers`. The worker acknowledges that envelope and does not run the ladder yet. A plan job is different: the worker solves it and publishes through `PlanPublication`. The ladder below is what `WorkerCrashTest`, `DriftStormTest`, and `PlanPublication` run.
 
 ```mermaid
 sequenceDiagram
@@ -78,4 +78,4 @@ The objective is fewer backup trips, then the change penalty times the number of
 
 ## Left out
 
-The web process does not assemble a fleet from the admin tables, so it does not start the ladder. Doing so would acknowledge triggers it cannot solve. There is no circuit breaker and no `Retry-After` on a database failure. The response is `STORE_FAILED`. Traces stay in the process. There is no collector. The distance cache is not passed into the solver. Compose is the deployment. There is no Kubernetes manifest and no second region. There is no learned consumption model, no external routing engine, and no Debezium connector. The outbox pump publishes rows a worker has already committed.
+The web process does not assemble a fleet from the admin tables, so it does not start the ladder. The worker does that for a plan job. A drift envelope is still not repaired. There is no circuit breaker and no `Retry-After` on a database failure. The response is `STORE_FAILED`. Traces stay in the process. There is no collector. The distance cache is not passed into the solver. Compose is the deployment. There is no Kubernetes manifest and no second region. There is no learned consumption model, no external routing engine, and no Debezium connector. The outbox pump publishes rows a worker has already committed.

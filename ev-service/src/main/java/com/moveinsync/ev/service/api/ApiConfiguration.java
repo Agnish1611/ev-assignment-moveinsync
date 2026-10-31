@@ -1,19 +1,26 @@
 package com.moveinsync.ev.service.api;
 
 import com.github.benmanes.caffeine.cache.Ticker;
+import com.moveinsync.ev.service.bus.BusSettings;
 import com.moveinsync.ev.service.bus.MemoryMessageBus;
 import com.moveinsync.ev.service.bus.MessageBus;
 import com.moveinsync.ev.service.cache.CacheInvalidator;
 import com.moveinsync.ev.service.cache.CacheSettings;
 import com.moveinsync.ev.service.cache.PlanCaches;
 import com.moveinsync.ev.service.cache.PlanReadCache;
+import com.moveinsync.ev.service.fleet.FleetLoad;
 import com.moveinsync.ev.service.observe.ServiceMeters;
 import com.moveinsync.ev.service.plan.JobReaper;
+import com.moveinsync.ev.service.plan.JobSolve;
+import com.moveinsync.ev.service.plan.PlanPublication;
 import com.moveinsync.ev.service.plan.SchemaMigrator;
 import com.moveinsync.ev.service.repository.CatalogRepository;
 import com.moveinsync.ev.service.repository.IdempotencyRepository;
 import com.moveinsync.ev.service.repository.JobRepository;
+import com.moveinsync.ev.service.repository.PlanHeadRepository;
+import com.moveinsync.ev.service.repository.PlanReadRepository;
 import com.moveinsync.ev.service.repository.PlanViewRepository;
+import com.moveinsync.ev.validator.PlanValidator;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import javax.sql.DataSource;
@@ -128,6 +135,36 @@ public class ApiConfiguration {
   @ConditionalOnExpression(ProcessRole.WORKER)
   JobReaper jobReaper(ObjectProvider<DataSource> sources, Clock clock, JobSettings settings) {
     return new JobReaper(sources.getObject(), new JobRepository(), clock, settings);
+  }
+
+  @Bean
+  @ConditionalOnExpression(ProcessRole.WORKER)
+  PlanPublication planPublication(Clock clock, ServiceMeters meters) {
+    return new PlanPublication(
+        new PlanValidator(), new PlanHeadRepository(), new PlanReadRepository(), clock, meters);
+  }
+
+  @Bean
+  @ConditionalOnExpression(ProcessRole.WORKER)
+  JobSolve jobSolve(
+      ObjectProvider<DataSource> sources,
+      Clock clock,
+      JobSettings settings,
+      PlanPublication publication,
+      ServiceMeters meters) {
+    DataSource dataSource = sources.getObject();
+    JobRepository jobs = new JobRepository();
+    return new JobSolve(
+        dataSource,
+        jobs,
+        new JobClaims(jobs, settings),
+        new FleetLoad(dataSource),
+        publication,
+        new PlanReadRepository(),
+        new PlanHeadRepository(),
+        clock,
+        BusSettings.standard().longestSolveMillis(),
+        meters);
   }
 
   @Bean

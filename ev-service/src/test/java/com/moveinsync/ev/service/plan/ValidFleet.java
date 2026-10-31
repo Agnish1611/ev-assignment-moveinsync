@@ -35,14 +35,18 @@ final class ValidFleet {
   }
 
   static PlannerInput input() {
-    Hub hub = Hub.of(TENANT.value(), "HUB-1", "Hub", DEPOT, ZoneId.of("UTC"), 4);
+    return input(TENANT);
+  }
+
+  static PlannerInput input(TenantId tenant) {
+    Hub hub = Hub.of(tenant.value(), "HUB-1", "Hub", DEPOT, ZoneId.of("UTC"), 4);
     return PlannerInput.builder()
-        .tenantId(TENANT)
+        .tenantId(tenant)
         .horizon(START, END)
         .addHub(hub)
-        .addCharger(Charger.of(TENANT.value(), "CHG-1", "HUB-1", 50))
-        .addCab(cab())
-        .addTrip(trip())
+        .addCharger(Charger.of(tenant.value(), "CHG-1", "HUB-1", 50))
+        .addCab(cab(tenant))
+        .addTrip(trip(tenant))
         .distanceProvider(new ConstantSpeedDistanceProvider(5_000, 10))
         .consumptionModel(new ConstantConsumptionModel())
         .build();
@@ -75,15 +79,15 @@ final class ValidFleet {
     return builder.build();
   }
 
-  private static CabShift cab() {
+  private static CabShift cab(TenantId tenant) {
     return new CabShift(
-        new Vehicle(TENANT, VehicleId.of("CAB-1"), 60_000L, 150L, 50), DEPOT, 50_000L, START);
+        new Vehicle(tenant, VehicleId.of("CAB-1"), 60_000L, 150L, 50), DEPOT, 50_000L, START);
   }
 
-  private static Trip trip() {
+  private static Trip trip(TenantId tenant) {
     Instant pickup = START.plusSeconds(3_600);
     return new Trip(
-        TENANT,
+        tenant,
         TripId.of("TRIP-1"),
         pickup,
         Location.of("LOC-P", "Pickup"),

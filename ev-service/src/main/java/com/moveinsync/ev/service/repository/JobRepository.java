@@ -95,6 +95,34 @@ public final class JobRepository {
     }
   }
 
+  public int release(Connection connection, String tenant, String jobId) throws SQLException {
+    String sql =
+        "UPDATE plan_job SET status = 'ACCEPTED', lease_until = NULL"
+            + " WHERE tenant_id = ? AND job_id = ? AND status = 'RUNNING'";
+    try (PreparedStatement statement = connection.prepareStatement(sql)) {
+      statement.setString(1, tenant);
+      statement.setString(2, jobId);
+      return statement.executeUpdate();
+    }
+  }
+
+  public int abandon(Connection connection, String tenant, String jobId, String status, String code)
+      throws SQLException {
+    if (!TERMINAL.contains(status)) {
+      throw new IllegalArgumentException("status is not terminal");
+    }
+    String sql =
+        "UPDATE plan_job SET status = ?, code = ?, published_version = NULL, lease_until = NULL"
+            + " WHERE tenant_id = ? AND job_id = ? AND status IN ('ACCEPTED', 'RUNNING')";
+    try (PreparedStatement statement = connection.prepareStatement(sql)) {
+      statement.setString(1, status);
+      statement.setString(2, code);
+      statement.setString(3, tenant);
+      statement.setString(4, jobId);
+      return statement.executeUpdate();
+    }
+  }
+
   public int reap(Connection connection, Instant now) throws SQLException {
     String sql =
         "UPDATE plan_job SET status = 'ACCEPTED', lease_until = NULL"

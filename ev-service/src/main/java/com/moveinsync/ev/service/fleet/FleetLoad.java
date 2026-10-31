@@ -11,7 +11,7 @@ import javax.sql.DataSource;
  *
  * <p>Time O(N) for N catalog rows. Space O(N).
  */
-public final class FleetLoad {
+public final class FleetLoad implements FleetSource {
 
   private final DataSource dataSource;
 
@@ -19,6 +19,7 @@ public final class FleetLoad {
     this.dataSource = Objects.requireNonNull(dataSource, "dataSource must not be null");
   }
 
+  @Override
   public LoadedFleet load(String tenant, String shard) {
     FleetSnapshot snapshot = read(tenant, shard);
     return new LoadedFleet(

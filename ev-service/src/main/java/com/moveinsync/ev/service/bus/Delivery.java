@@ -55,6 +55,10 @@ public final class Delivery {
     }
   }
 
+  public void again(BusRecord record) {
+    fail(record);
+  }
+
   public void attempt(BusRecord record, EnvelopeSink sink) {
     Envelope envelope;
     try {

@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.moveinsync.ev.service.api.CatalogService;
 import com.moveinsync.ev.service.bus.OutboxPump;
+import com.moveinsync.ev.service.bus.PlannerWorker;
 import com.moveinsync.ev.service.controller.AdminController;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,7 @@ class WorkerProcessIT {
   @Autowired private ObjectProvider<AdminController> admin;
   @Autowired private ObjectProvider<OutboxPump> pump;
   @Autowired private ObjectProvider<JobReaper> reaper;
+  @Autowired private ObjectProvider<PlannerWorker> worker;
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
@@ -58,6 +60,7 @@ class WorkerProcessIT {
     mvc.perform(get("/actuator/health")).andExpect(status().isOk());
     assertThat(pump.getIfAvailable()).isNotNull();
     assertThat(reaper.getIfAvailable()).isNotNull();
+    assertThat(worker.getIfAvailable()).isNotNull();
     assertThat(catalog.getIfAvailable()).isNull();
     assertThat(admin.getIfAvailable()).isNull();
   }

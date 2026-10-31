@@ -9,6 +9,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 /**
  * Single consumer of plan triggers. The poll thread only queues work. The partition stays paused
@@ -45,6 +46,10 @@ public final class PlannerWorker implements AutoCloseable {
     bus.subscribe(topic, (record, ack) -> submit(record, ack, sink));
   }
 
+  public void watchDeadLetters(Consumer<BusRecord> dead) {
+    bus.subscribe(Topics.deadLetter(topic), (record, ack) -> dead(record, ack, dead));
+  }
+
   public static DriftEvent drift(Envelope envelope) {
     if (!(envelope.payload() instanceof Envelope.PlanTrigger trigger)) {
       throw new IllegalArgumentException("trigger payload is required");
@@ -71,8 +76,14 @@ public final class PlannerWorker implements AutoCloseable {
       executor.execute(() -> finish(record, ack, sink));
     } catch (RejectedExecutionException ex) {
       bus.resume(topic);
-      throw new BusException("solver queue is full", ex);
+      delivery.again(record);
+      ack.run();
     }
+  }
+
+  private static void dead(BusRecord record, Runnable ack, Consumer<BusRecord> sink) {
+    sink.accept(record);
+    ack.run();
   }
 
   private void finish(BusRecord record, Runnable ack, Delivery.EnvelopeSink sink) {

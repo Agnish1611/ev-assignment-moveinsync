@@ -6,6 +6,8 @@ import com.moveinsync.ev.planner.solve.DriftEvent;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.OptionalLong;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -68,6 +70,31 @@ class PlannerWorkerTest {
     worker.close();
   }
 
+  @Test
+  void aFullQueueRetriesInsteadOfDropping() throws InterruptedException {
+    EagerBus bus = new EagerBus();
+    BusSettings settings = new BusSettings(1, 1, 120_000L, 30_000L, 5L, 60L, 200L, 10_000L, 8, 10);
+    Clock clock = Clock.fixed(START, ZoneOffset.UTC);
+    Delivery delivery = new Delivery(bus, new SeenSequences(), clock, settings);
+    PlannerWorker worker = new PlannerWorker(bus, delivery, settings);
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    worker.start(
+        envelope -> {
+          started.countDown();
+          await(release);
+        });
+
+    bus.send(trigger(1L));
+    assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+    bus.send(trigger(2L));
+    bus.send(trigger(3L));
+
+    assertThat(bus.retried()).isEqualTo(1);
+    release.countDown();
+    worker.close();
+  }
+
   private static PlannerWorker worker(MemoryMessageBus bus) {
     Clock clock = Clock.fixed(START, ZoneOffset.UTC);
     Delivery delivery = new Delivery(bus, new SeenSequences(), clock, BusSettings.standard());
@@ -100,5 +127,56 @@ class PlannerWorkerTest {
             Envelope.SCHEMA_VERSION,
             new Envelope.PlanTrigger("LATE_CAB", "CAB-1", "shift-1", START, OptionalLong.empty()));
     return BusRecord.of(Topics.PLAN_TRIGGERS, "tenant-a:shift-1", EnvelopeCodec.write(envelope));
+  }
+
+  private static final class EagerBus implements MessageBus {
+    private final Map<String, RecordHandler> handlers = new HashMap<>();
+    private int retried;
+
+    @Override
+    public void send(BusRecord record) {
+      if (Topics.retryShort(Topics.PLAN_TRIGGERS).equals(record.topic())) {
+        retried++;
+        return;
+      }
+      RecordHandler handler = handlers.get(record.topic());
+      if (handler != null) {
+        handler.onRecord(record, () -> {});
+      }
+    }
+
+    @Override
+    public void subscribe(String topic, RecordHandler handler) {
+      handlers.put(topic, handler);
+    }
+
+    @Override
+    public void pause(String topic) {
+      // Delivery is not paused, so a full solver queue can reject.
+    }
+
+    @Override
+    public void resume(String topic) {
+      // The test releases the blocked solve itself.
+    }
+
+    @Override
+    public void defer(BusRecord record, Instant until) {
+      // Retries are counted in send.
+    }
+
+    @Override
+    public void releaseDue(Instant now) {
+      // Nothing is deferred.
+    }
+
+    @Override
+    public void close() {
+      // No broker to stop.
+    }
+
+    private int retried() {
+      return retried;
+    }
   }
 }

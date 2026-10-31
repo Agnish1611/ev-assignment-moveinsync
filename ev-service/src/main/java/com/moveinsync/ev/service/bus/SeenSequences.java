@@ -9,7 +9,7 @@ import java.util.Map;
  * The map drops the oldest producer once it passes the bound. A dropped producer can be accepted
  * again.
  */
-final class SeenSequences {
+public final class SeenSequences {
 
   enum Disposition {
     ACCEPT,
@@ -20,7 +20,7 @@ final class SeenSequences {
   private final int maxProducers;
   private final Map<String, Long> highest = new LinkedHashMap<>();
 
-  SeenSequences() {
+  public SeenSequences() {
     this(BusSettings.standard().seenProducers());
   }
 
