@@ -1,6 +1,6 @@
 # 300-Cab Planner Solve
 
-Numbers below are from one run of `BenchmarkScenarioTest` on 2026-10-30. The solve timer wraps `GreedyConstructionSolver.solve` only.
+Numbers below are from one run of `BenchmarkScenarioTest` on 2026-10-31. The solve timer wraps `GreedyConstructionSolver.solve` only.
 
 ## Scale
 
@@ -12,7 +12,7 @@ Numbers below are from one run of `BenchmarkScenarioTest` on 2026-10-30. The sol
 
 ## Result
 
-- **Solve time:** 24.258 s
+- **Solve time:** 2.710 s
 - **Assigned:** 1,500
 - **Unassigned:** 0
 - **Deadline exhausted:** false

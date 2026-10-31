@@ -85,12 +85,12 @@ A published plan version is cached by tenant, shard, and version. It has no expi
 
 ## Performance
 
-Measured on an Apple M4 (10 cores, 16 GB, Darwin arm64) with Temurin 21.0.13+9-LTS. The write-up is `docs/reports/PROOF_LATENCY.md`. The 300-cab construction is 24.258 s (`docs/reports/PLANNER_300CAB_REPORT.md`).
+Measured on an Apple M4 (10 cores, 16 GB, Darwin arm64) with Temurin 21.0.13+9-LTS. The write-up is `docs/reports/PROOF_LATENCY.md`. The 300-cab construction is 2.710 s (`docs/reports/PLANNER_300CAB_REPORT.md`).
 
 | Run | Result |
 |---|---|
-| Construction, 10 / 20 / 50 / 100 cabs | 18 ms, 27 ms, 164 ms, 1,012 ms. Each plan passed the validator. |
+| Construction, 10 / 20 / 50 / 100 cabs | 15 ms, 8 ms, 51 ms, 100 ms. Each plan passed the validator. |
 | JMH charge duration across the 80 percent knee | 1.908 ± 0.132 ns/op |
 | k6, 10 users, 15 s, `GET /actuator/health` | 12,401.5 req/s, p50 684.12 µs, p99 1.7 ms, 186,023 responses, none failed |
 
-Construction is O(T² · C · H · P) time and O(T + C) space for T trips, C cabs, H hubs, and P plugs. The lower bound is O(T · C · H + T log T) time and O(T) space. A single construction of the case-study fleet, 300 cabs, 40 chargers, and 1,500 trips, uses 24.258 s of the 30 s budget. No larger fleet was measured. That is where one construction stops fitting the budget on this machine. The k6 figure is the public health scrape, with database health turned off. It is not a plan publish. The validator on that same 300-cab plan is 3.290 ms at p50 and 5.113 ms at p99 (`docs/reports/VALIDATION_300CAB_REPORT.md`).
+Construction is O(T² · C · H · P) time when every accepted trip books a plug, and O(T · C) space for the regret table. A commit that does not book a plug re-probes only that cab. T is trips, C is cabs, H is hubs, and P is plugs. The lower bound is O(T · C · H + T log T) time and O(T) space. A single construction of the case-study fleet, 300 cabs, 40 chargers, and 1,500 trips, took 2.710 s. No larger fleet was measured. Worst-case time still applies when every accepted trip books a plug. This fleet does not. The k6 figure is the public health scrape, with database health turned off. It is not a plan publish. The validator on that same 300-cab plan is 3.290 ms at p50 and 5.113 ms at p99 (`docs/reports/VALIDATION_300CAB_REPORT.md`).

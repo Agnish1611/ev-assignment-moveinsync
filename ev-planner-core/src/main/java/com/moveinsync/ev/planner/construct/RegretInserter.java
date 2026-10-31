@@ -14,10 +14,8 @@ import java.util.Optional;
 /**
  * Inserts trips by regret-k, or in start-time order when {@code regretDepth} is 0.
  *
- * <p>Time O(R^2 · C · H · P) for regret and O(R · C · H · P) for start-time order, where R is the
- * number of trips still open, C is the number of cabs, H is the number of hubs, and P is the number
- * of plugs considered when a direct append needs a charge stop. Space O(R + C). The deadline is
- * polled before each insertion.
+ * <p>Time O(R · C · H · P) for start-time order. Regret-k time and space are {@link RegretBoard}.
+ * The deadline is polled before each insertion.
  */
 final class RegretInserter {
 
@@ -30,6 +28,10 @@ final class RegretInserter {
       List<UnassignedTrip> unassigned,
       PlugCalendar plugs,
       int regretDepth) {
+    if (regretDepth > 0) {
+      return RegretBoard.fill(
+          input, config, clock, cursors, remaining, unassigned, plugs, regretDepth);
+    }
     boolean exhausted = false;
     while (!remaining.isEmpty()) {
       if (!clock.instant().isBefore(config.deadline())) {

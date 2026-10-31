@@ -12,8 +12,8 @@ import java.util.SplittableRandom;
  * Inserts lifted trips by regret-2 or regret-3. A trip with fewer feasible cabs than the depth is
  * inserted before a trip that has a full set of alternatives.
  *
- * <p>Time O(R^2 · C · H) for R lifted trips, C cabs, and H hubs. Space O(R + C). A deadline that
- * has already passed returns the surviving plan unchanged.
+ * <p>Time and space follow {@link RegretInserter}. A deadline that has already passed returns the
+ * surviving plan unchanged.
  */
 public final class RegretRepairOperator implements RepairOperator {
 

@@ -153,3 +153,7 @@ The JMH annotation processor is not on the verify compile. Generated JMH code ca
 ### D32 — Packaging
 
 Two web instances each have their own Kafka consumer group and share one Postgres. A shared group would hide cache events from one instance. Flyway migrates as `ev_admin` before the application connects as `ev_api`. That login is not a superuser and does not own the tables. Keycloak realm `ev` puts `tenant_id` and `role` on the access token. The schema registry receives the envelope proto. Prometheus scrapes both instances and Grafana loads the dashboard. HTTP still does not publish a plan head, and the web process still does not run the ladder, because there is no fleet assembled from the admin tables. Dev passwords match the compose file and are replaced outside this repository. The compose broker uses replication factor 1. Production uses 3 with `min.insync.replicas=2`.
+
+### D33 — Regret table
+
+Regret insertion keeps the feasible cabs for each open trip. A commit that does not book a plug replaces that cab's offer and leaves the others. A commit that books a plug scores every open trip again, because the calendar can block a different cab. The 30 second check is unchanged. Rescoring every cab on every insertion put the 300-cab fleet at 35.8 seconds on the GitHub runner. The selection rule is the same: higher regret, then earlier start, then trip id.

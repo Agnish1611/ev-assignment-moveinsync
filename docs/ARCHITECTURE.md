@@ -55,13 +55,13 @@ The pipeline is:
 3. A flow re-timer with assignments frozen. The 60-second preemptive flow is a cost lower bound and is not published. A published session is one contiguous block, and it moves only when that block is feasible and strictly cheaper.
 4. Validation, then compare-and-set of the plan head.
 
-Construction is O(T² · C · H · P) time and O(T + C) space, for T trips, C cabs, H hubs, and P plugs. ALNS is O(I · T² · C · H) for I iterations. The backup lower bound is O(T · C · H + T log T) time and O(T) space. The seed and the input hash are stored on every version, so a run can be repeated.
+Construction is O(T² · C · H · P) time when every accepted trip books a plug, and O(T · C) space for the regret table. A commit that does not book a plug re-probes only that cab. T is trips, C is cabs, H is hubs, and P is plugs. ALNS is O(I · T² · C · H) for I iterations. The backup lower bound is O(T · C · H + T log T) time and O(T) space. The seed and the input hash are stored on every version, so a run can be repeated.
 
 The backup lower bound is the maximum of three counts: trips no cab can cover even with a full pack, peak overlap beyond the cab count, and trips that do not fit in the starting batteries plus charger throughput. Trip energy in that pack is the loaded distance plus a reserve leg. Deadhead is omitted, so the bound stays low. The cost lower bound is the preemptive flow on the plan that was built. The 300-cab evening fleet is feasible, so both the bound and the result are 0 backups and 0 charging cost. A tighter demand pattern can leave backups. The case study's illustration of 1,462 covered trips and 38 backups is that kind of pattern. This repository does not invent that result for the generated fleet.
 
 An unassigned trip is offered to every published route. If one extra plug makes the charge succeed, the reason is charger congestion and the evidence is the hub id plus the session window in UTC. Cab evidence stores arrival watt-hours and the planning floor. The synthetic plug is not written onto the plan.
 
-On this machine one construction of 300 cabs, 40 chargers, and 1,500 trips takes 24.258 seconds of a 30-second budget. That is the largest fleet measured here, and it is where a single construction stops fitting the budget. Smaller points are in `docs/reports/PROOF_LATENCY.md`.
+On this machine one construction of 300 cabs, 40 chargers, and 1,500 trips took 2.710 seconds. That is the largest fleet measured here. Smaller points are in `docs/reports/PROOF_LATENCY.md`.
 
 ## Re-plan ladder
 

@@ -21,10 +21,10 @@ import java.util.SplittableRandom;
  * regret-2, or regret-3. Operator choice is a weighted draw. A worse score is accepted when a
  * seeded draw falls under a cooling threshold that starts at {@value #INITIAL_TEMPERATURE} out of
  * {@value #TEMPERATURE_SCALE} and is multiplied by 9/10 each iteration. The best score seen is
- * returned. Time O(I · T^2 · C · H) for I iterations, T trips, C cabs, and H hubs. Space O(T + C).
- * The deadline is polled before construction and before every iteration. {@code maxIterations} of 0
- * returns construction unchanged. The incumbent is retimed once after search, with assignments
- * frozen.
+ * returned. Time O(I · T^2 · C · H) for I iterations, T trips, C cabs, and H hubs. Space O(T · C)
+ * while a regret table is live. The deadline is polled before construction and before every
+ * iteration. {@code maxIterations} of 0 returns construction unchanged. The incumbent is retimed
+ * once after search, with assignments frozen.
  */
 public final class AlnsFleetSolver implements FleetSolver {
 

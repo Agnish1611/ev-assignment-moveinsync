@@ -27,9 +27,9 @@ import java.util.Set;
  * than {@link SolverConfig#DEFAULT_REPLAN_CHANGE_BUDGET} assignments, sends only the trips that
  * still do not fit to backup. Charger, trip, and cab triggers are prepared before this climb.
  *
- * <p>Time O(T^2 · C · H · P) for T trips, C cabs, H hubs, and P plugs. Space O(T + C). The deadline
- * is polled before each tier. Tier 2 is kept only when it beats the incumbent and the plan id is
- * still the one captured at the start of the call.
+ * <p>Time O(T^2 · C · H · P) for T trips, C cabs, H hubs, and P plugs. Space O(T · C) while a
+ * regret table is live. The deadline is polled before each tier. Tier 2 is kept only when it beats
+ * the incumbent and the plan id is still the one captured at the start of the call.
  */
 public final class LadderReplanSolver implements ReplanSolver {
 

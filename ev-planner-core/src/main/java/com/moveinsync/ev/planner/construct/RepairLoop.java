@@ -18,8 +18,8 @@ import java.util.SplittableRandom;
 /**
  * Puts lifted trips back onto the surviving routes.
  *
- * <p>Time follows {@link RegretInserter}. Space O(T + C). A deadline that has already passed
- * returns the surviving plan unchanged.
+ * <p>Time and space follow {@link RegretInserter}. A deadline that has already passed returns the
+ * surviving plan unchanged.
  */
 final class RepairLoop {
 

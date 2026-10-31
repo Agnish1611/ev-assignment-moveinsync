@@ -19,10 +19,11 @@ import java.util.Objects;
  * hub session fits before the pickup. Trips that still do not fit, and trips still open when the
  * deadline passes, go to backup.
  *
- * <p>Time O(T^2 · C · H · P) for T trips, C cabs, H hubs, and P plugs, plus one flow re-time of the
- * finished assignments. Space O(T + C). The deadline is polled before each insertion. A deadline
- * that has already passed returns the backup plan. After assignments are frozen, the flow re-timer
- * may move a session onto a cheaper tariff.
+ * <p>Time O(T^2 · C · H · P) for T trips, C cabs, H hubs, and P plugs when every accepted trip
+ * books a plug, plus one flow re-time of the finished assignments. A commit that leaves the plug
+ * calendar alone re-probes only that cab. Space O(T · C) for the regret table. The deadline is
+ * polled before each insertion. A deadline that has already passed returns the backup plan. After
+ * assignments are frozen, the flow re-timer may move a session onto a cheaper tariff.
  */
 public final class GreedyConstructionSolver implements FleetSolver {
 
