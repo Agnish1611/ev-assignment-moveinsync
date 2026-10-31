@@ -1,6 +1,6 @@
 # Latency
 
-The construction numbers below are from one `ScaleCurveTest` run on 2026-10-31. The 300-cab solve is separate: 2.710 s in `PLANNER_300CAB_REPORT.md`. The JMH and k6 sections are the earlier runs recorded the same day.
+The construction numbers below are from one `ScaleCurveTest` run on 2026-10-31. The 300-cab solve is separate: 24.870 s in `PLANNER_300CAB_REPORT.md`. The JMH and k6 sections are the earlier runs recorded the same day.
 
 ## Hardware
 
@@ -22,7 +22,7 @@ The base is 10 cabs and five trips each. Chargers follow `cabs * 40 / 300`, at l
 | 5x | 50 | 6 | 250 | 51 ms |
 | 10x | 100 | 13 | 500 | 100 ms |
 
-Each figure is one solve. At these sizes the 20-cab point can come out under the 10-cab point. The case-study fleet is 300 cabs, 40 chargers, and 1,500 trips, and that construction took 2.710 s. No larger fleet was measured. Worst-case construction, when every accepted trip books a plug, is still O(T² · C · H · P). This fleet does not take that path.
+Each figure is one solve. At these sizes the 20-cab point can come out under the 10-cab point. The priced case-study fleet is 300 cabs, 40 chargers, and 1,500 trips, and that construction took 24.870 s. Four accepted trips book a plug. No larger fleet was measured. Worst-case construction, when every accepted trip books a plug, is still O(T² · C · H · P). The scale-curve fleets in the table do not book a plug.
 
 ## JMH
 

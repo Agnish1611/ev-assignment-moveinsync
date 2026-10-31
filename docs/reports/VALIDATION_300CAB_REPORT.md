@@ -1,6 +1,6 @@
 # 300-cab validator
 
-Numbers below are from the validator benchmark on the 300-cab plan. They are not the planner solve. That solve is `PLANNER_300CAB_REPORT.md`.
+Numbers below are from the validator benchmark on an earlier 300-cab plan: 300 staggered sessions and five trips per cab. They are not the priced solve in `PLANNER_300CAB_REPORT.md`.
 
 ## Scale
 

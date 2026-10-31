@@ -32,7 +32,7 @@ Keycloak users `operator`, `employee`, `admin`, and `device` each use that same 
 - A charging session is one contiguous interval. Fast to 80 percent of the pack, half power above that. Duration rounds up. Energy delivered rounds down.
 - Employees are opaque ids. The tenant and the role come from the token claims `tenant_id` and `role`.
 - Energy is whole watt-hours, distance is metres, and time is UTC epoch seconds. The planner keeps an 18 percent margin. The validator enforces the 15 percent floor.
-- The 300-cab run is a generated evening fleet. Every trip fits, so the backup count is 0 and matches the lower bound in `docs/reports/PLANNER_300CAB_REPORT.md`. The case study's illustration of 1,462 covered trips and 38 backups is a tighter demand pattern than this fleet. `AssignmentDiagnosis` explains a trip the fleet cannot cover. `LadderReplanTest` is the cab that arrives at 22 percent instead of 41 percent.
+- The 300-cab report is one `PricedScale` solve: three hubs, a peak tariff and an off-peak tariff, 1,350 assigned trips, 150 backup trips, and four charges between the morning hops and an 80 km trip. The backup count matches the overlap lower bound. `docs/reports/PLANNER_300CAB_REPORT.md` records that run. `ScaleScenario` is the untariffed generator behind the scale curve, and that generator assigns every trip. The case study's illustration of 1,462 covered trips and 38 backups is a different demand pattern. `AssignmentDiagnosis` explains a trip the fleet cannot cover. The reading that falls from 41 percent to 22 percent is `BatteryDropTest`, written up in `docs/reports/BATTERY_DROP_22_REPORT.md`.
 
 ## Modules
 
@@ -85,7 +85,7 @@ A published plan version is cached by tenant, shard, and version. It has no expi
 
 ## Performance
 
-Measured on an Apple M4 (10 cores, 16 GB, Darwin arm64) with Temurin 21.0.13+9-LTS. The write-up is `docs/reports/PROOF_LATENCY.md`. The 300-cab construction is 2.710 s (`docs/reports/PLANNER_300CAB_REPORT.md`).
+Measured on an Apple M4 (10 cores, 16 GB, Darwin arm64) with Temurin 21.0.13+9-LTS. The write-up is `docs/reports/PROOF_LATENCY.md`. The priced 300-cab construction is 24.870 s (`docs/reports/PLANNER_300CAB_REPORT.md`).
 
 | Run | Result |
 |---|---|
@@ -93,4 +93,4 @@ Measured on an Apple M4 (10 cores, 16 GB, Darwin arm64) with Temurin 21.0.13+9-L
 | JMH charge duration across the 80 percent knee | 1.908 ± 0.132 ns/op |
 | k6, 10 users, 15 s, `GET /actuator/health` | 12,401.5 req/s, p50 684.12 µs, p99 1.7 ms, 186,023 responses, none failed |
 
-Construction is O(T² · C · H · P) time when every accepted trip books a plug, and O(T · C) space for the regret table. A commit that does not book a plug re-probes only that cab. T is trips, C is cabs, H is hubs, and P is plugs. The lower bound is O(T · C · H + T log T) time and O(T) space. A single construction of the case-study fleet, 300 cabs, 40 chargers, and 1,500 trips, took 2.710 s. No larger fleet was measured. Worst-case time still applies when every accepted trip books a plug. This fleet does not. The published k6 figure was taken before readiness checked the database. It is not a plan publish. The validator on that same 300-cab plan is 3.290 ms at p50 and 5.113 ms at p99 (`docs/reports/VALIDATION_300CAB_REPORT.md`).
+Construction is O(T² · C · H · P) time when every accepted trip books a plug, and O(T · C) space for the regret table. A commit that does not book a plug re-probes only that cab. T is trips, C is cabs, H is hubs, and P is plugs. The lower bound is O(T · C · H + T log T) time and O(T) space. A single construction of the priced 300-cab fleet, 300 cabs, 40 chargers, and 1,500 trips, took 24.870 s. Four accepted trips book a plug on that fleet. No larger fleet was measured. The scale-curve points above do not book a plug. The published k6 figure was taken before readiness checked the database. It is not a plan publish. Validator timings of 3.290 ms at p50 and 5.113 ms at p99 are an earlier 300-cab plan (`docs/reports/VALIDATION_300CAB_REPORT.md`), not this priced solve.
