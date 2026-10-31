@@ -4,6 +4,7 @@ import com.moveinsync.ev.service.api.ApiModels.PlanDiffView;
 import com.moveinsync.ev.service.api.ApiModels.PlanHeadView;
 import com.moveinsync.ev.service.api.ApiModels.PlanJobAccepted;
 import com.moveinsync.ev.service.api.ApiModels.PlanJobRequest;
+import com.moveinsync.ev.service.api.ApiModels.PlanJobStatus;
 import com.moveinsync.ev.service.api.ApiModels.PlanVersionView;
 import com.moveinsync.ev.service.api.ApiModels.TimelineView;
 import com.moveinsync.ev.service.api.ApiModels.UnassignedView;
@@ -48,7 +49,13 @@ public class PlanController {
   public ResponseEntity<PlanJobAccepted> create(
       @RequestHeader(value = "Idempotency-Key", required = false) String key,
       @RequestBody PlanJobRequest request) {
-    return jobs.accept(callers.require(), key, request.shard());
+    return jobs.accept(callers.require(), key, request);
+  }
+
+  @GetMapping("/plans/jobs/{jobId}")
+  @PreAuthorize("hasAnyRole('OPERATOR','ADMIN')")
+  public PlanJobStatus job(@PathVariable("jobId") String jobId) {
+    return jobs.status(callers.require(), jobId);
   }
 
   @GetMapping("/plans/current")

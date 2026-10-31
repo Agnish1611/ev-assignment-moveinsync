@@ -30,6 +30,7 @@ class WorkerProcessIT {
   @Autowired private ObjectProvider<CatalogService> catalog;
   @Autowired private ObjectProvider<AdminController> admin;
   @Autowired private ObjectProvider<OutboxPump> pump;
+  @Autowired private ObjectProvider<JobReaper> reaper;
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
@@ -44,6 +45,7 @@ class WorkerProcessIT {
     registry.add("ev.bus.bootstrap", KafkaBrokers::ready);
     registry.add("ev.bus.group", () -> "role-worker");
     registry.add("ev.bus.relay-millis", () -> "3600000");
+    registry.add("ev.job.reap-millis", () -> "3600000");
   }
 
   @AfterAll
@@ -55,6 +57,7 @@ class WorkerProcessIT {
   void healthIsUpAndCatalogWritesAreAbsent() throws Exception {
     mvc.perform(get("/actuator/health")).andExpect(status().isOk());
     assertThat(pump.getIfAvailable()).isNotNull();
+    assertThat(reaper.getIfAvailable()).isNotNull();
     assertThat(catalog.getIfAvailable()).isNull();
     assertThat(admin.getIfAvailable()).isNull();
   }

@@ -27,12 +27,16 @@ class EnvelopeCodecTest {
             new Envelope.PlanTrigger("BATTERY", "CAB-1", "shift-1", AT, OptionalLong.of(13_200L)));
     Envelope published = envelope(4L, new Envelope.PlanPublished("shift-1", 8L));
     Envelope changed = envelope(5L, new Envelope.ConfigChanged("HUB", "HUB-1"));
+    Envelope requested =
+        envelope(
+            6L, new Envelope.PlanRequested("shift-1", "job-1", Envelope.PlanRequested.INITIAL));
 
     assertThat(EnvelopeCodec.read(EnvelopeCodec.write(telemetry))).isEqualTo(telemetry);
     assertThat(EnvelopeCodec.read(EnvelopeCodec.write(charger))).isEqualTo(charger);
     assertThat(EnvelopeCodec.read(EnvelopeCodec.write(trigger))).isEqualTo(trigger);
     assertThat(EnvelopeCodec.read(EnvelopeCodec.write(published))).isEqualTo(published);
     assertThat(EnvelopeCodec.read(EnvelopeCodec.write(changed))).isEqualTo(changed);
+    assertThat(EnvelopeCodec.read(EnvelopeCodec.write(requested))).isEqualTo(requested);
   }
 
   @Test
@@ -76,6 +80,9 @@ class EnvelopeCodecTest {
       assertThat(proto).contains("ChargerStatus charger_status = 11;");
       assertThat(proto).contains("PlanTrigger plan_trigger = 12;");
       assertThat(proto).contains("PlanPublished plan_published = 13;");
+      assertThat(proto).contains("ConfigChanged config_changed = 14;");
+      assertThat(proto).contains("PlanRequested plan_requested = 15;");
+      assertThat(proto).contains("string job_id = 2;");
       assertThat(proto).contains("string cab_id = 1;");
       assertThat(proto).contains("int64 soc_wh = 2;");
     }

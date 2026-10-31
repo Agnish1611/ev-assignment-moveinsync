@@ -14,7 +14,7 @@ public final class OutboxRepository {
 
   private static final String CLAIM =
       """
-      SELECT outbox_id, tenant_id, shard, version, created_at
+      SELECT outbox_id, tenant_id, shard, version, created_at, topic, payload
       FROM outbox
       ORDER BY outbox_id
       LIMIT ?
@@ -45,17 +45,28 @@ public final class OutboxRepository {
 
   private static OutboxRow read(ResultSet rows) throws SQLException {
     Timestamp created = rows.getTimestamp("created_at");
-    if (created == null) {
-      throw new SQLException("outbox created_at is missing");
+    String topic = rows.getString("topic");
+    String payload = rows.getString("payload");
+    if (created == null || topic == null || payload == null) {
+      throw new SQLException("outbox row is incomplete");
     }
     return new OutboxRow(
         rows.getLong("outbox_id"),
         rows.getString("tenant_id"),
         rows.getString("shard"),
         rows.getLong("version"),
-        created.toInstant());
+        created.toInstant(),
+        topic,
+        payload);
   }
 
-  /** One unpublished plan version. The payload is always the plan-published marker. */
-  public record OutboxRow(long id, String tenant, String shard, long version, Instant createdAt) {}
+  /** One unpublished row. A plan event carries version. A trigger carries the envelope. */
+  public record OutboxRow(
+      long id,
+      String tenant,
+      String shard,
+      long version,
+      Instant createdAt,
+      String topic,
+      String payload) {}
 }

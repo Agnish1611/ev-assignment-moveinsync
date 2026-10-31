@@ -33,7 +33,7 @@ flowchart LR
 
 Each web instance has its own Kafka consumer group, `ev-web-1` and `ev-web-2`, so a plan-published event reaches both caches. A shared group would deliver the event to only one of them. Topics are created before the processes start, and auto-create is off. A missing topic stops the process. The compose broker uses replication factor 1. Production is replication factor 3 with `min.insync.replicas=2`.
 
-Keycloak realm `ev` puts `tenant_id` and `role` on the access token. The application checks the signature against the realm JWKS and does not trust a tenant in the request body. `POST /v1/plans` records an accepted job and does not publish a head.
+Keycloak realm `ev` puts `tenant_id` and `role` on the access token. The application checks the signature against the realm JWKS and does not trust a tenant in the request body. `POST /v1/plans` records an accepted job and a trigger in one transaction. It does not publish a head. `GET /v1/plans/jobs/{jobId}` returns that job for the token tenant.
 
 ## Battery-drift re-plan
 
@@ -73,7 +73,7 @@ The objective is fewer backup trips, then the change penalty times the number of
 | Database connection drops during publish | `STORE_FAILED`, no SQL in the body | The head stays on the last committed version |
 | Database down on a cached read | The cached version, while it is inside its lifetime | The current-head pointer expires after 2 seconds. A published version stays until it is evicted by size or by a plan event |
 | One web instance stops | The other instance | Both serve health, reads, and catalog writes. Killing one is the live failover |
-| Kafka down | A trigger post fails. A head already stored is still readable | The outbox keeps rows until the relay can send |
+| Kafka down | A battery post fails. A plan post is stored. A head already stored is still readable | The outbox keeps the plan trigger until the relay can send |
 | Cross-tenant read | 404 | The tenant comes from the token. Row-level security compares it again |
 
 ## Left out

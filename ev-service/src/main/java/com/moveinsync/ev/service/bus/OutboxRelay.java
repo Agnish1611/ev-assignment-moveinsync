@@ -5,6 +5,7 @@ import com.moveinsync.ev.service.plan.RelaySession;
 import com.moveinsync.ev.service.repository.OutboxRepository;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import javax.sql.DataSource;
@@ -40,7 +41,7 @@ public final class OutboxRelay {
       RelaySession.apply(connection);
       List<OutboxRepository.OutboxRow> rows = outbox.claim(connection, settings.outboxBatch());
       for (OutboxRepository.OutboxRow row : rows) {
-        bus.send(event(row));
+        bus.send(delivery(row));
         outbox.delete(connection, row.tenant(), row.id());
       }
       connection.commit();
@@ -51,7 +52,14 @@ public final class OutboxRelay {
     }
   }
 
-  private BusRecord event(OutboxRepository.OutboxRow row) {
+  BusRecord delivery(OutboxRepository.OutboxRow row) {
+    if (Topics.PLAN_EVENTS.equals(row.topic())) {
+      return published(row);
+    }
+    return BusRecord.of(row.topic(), row.tenant() + ":" + row.shard(), decode(row.payload()));
+  }
+
+  private static BusRecord published(OutboxRepository.OutboxRow row) {
     Envelope envelope =
         new Envelope(
             row.tenant() + ":" + row.shard() + ":" + row.version(),
@@ -63,6 +71,14 @@ public final class OutboxRelay {
             new Envelope.PlanPublished(row.shard(), row.version()));
     return BusRecord.of(
         Topics.PLAN_EVENTS, row.tenant() + ":" + row.shard(), EnvelopeCodec.write(envelope));
+  }
+
+  private static byte[] decode(String payload) {
+    try {
+      return Base64.getDecoder().decode(payload);
+    } catch (IllegalArgumentException ex) {
+      throw new PlanStoreException("outbox relay failed", ex);
+    }
   }
 
   private static PlanStoreException failed(Exception failure) {

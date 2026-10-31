@@ -17,6 +17,7 @@ message Envelope {
     PlanTrigger plan_trigger = 12;
     PlanPublished plan_published = 13;
     ConfigChanged config_changed = 14;
+    PlanRequested plan_requested = 15;
   }
 }
 
@@ -49,4 +50,10 @@ message PlanPublished {
 message ConfigChanged {
   string kind = 1;
   string subject_id = 2;
+}
+
+message PlanRequested {
+  string shard = 1;
+  string job_id = 2;
+  string mode = 3;
 }

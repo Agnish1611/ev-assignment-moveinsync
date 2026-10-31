@@ -178,16 +178,24 @@ public final class PlanHeadRepository {
   }
 
   public void insertOutbox(
-      Connection connection, String tenant, String shard, long version, Instant at)
+      Connection connection,
+      String tenant,
+      String shard,
+      long version,
+      String payload,
+      Instant at,
+      String topic)
       throws SQLException {
     String sql =
-        "INSERT INTO outbox (tenant_id, shard, version, payload, created_at) VALUES (?, ?, ?, ?, ?)";
+        "INSERT INTO outbox (tenant_id, shard, version, payload, created_at, topic)"
+            + " VALUES (?, ?, ?, ?, ?, ?)";
     try (PreparedStatement statement = connection.prepareStatement(sql)) {
       statement.setString(1, tenant);
       statement.setString(2, shard);
       statement.setLong(3, version);
-      statement.setString(4, "PLAN_PUBLISHED");
+      statement.setString(4, payload);
       statement.setTimestamp(5, Timestamp.from(at));
+      statement.setString(6, topic);
       statement.executeUpdate();
     }
   }

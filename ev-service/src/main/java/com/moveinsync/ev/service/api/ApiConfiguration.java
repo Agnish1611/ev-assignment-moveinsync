@@ -8,6 +8,7 @@ import com.moveinsync.ev.service.cache.CacheSettings;
 import com.moveinsync.ev.service.cache.PlanCaches;
 import com.moveinsync.ev.service.cache.PlanReadCache;
 import com.moveinsync.ev.service.observe.ServiceMeters;
+import com.moveinsync.ev.service.plan.JobReaper;
 import com.moveinsync.ev.service.plan.SchemaMigrator;
 import com.moveinsync.ev.service.repository.CatalogRepository;
 import com.moveinsync.ev.service.repository.IdempotencyRepository;
@@ -29,7 +30,12 @@ import org.springframework.core.env.Environment;
 /** Wires the HTTP API. A process without a web server does not create these beans. */
 @Configuration
 @ConditionalOnWebApplication
-@EnableConfigurationProperties({ApiSettings.class, CacheSettings.class, RoleSettings.class})
+@EnableConfigurationProperties({
+  ApiSettings.class,
+  CacheSettings.class,
+  RoleSettings.class,
+  JobSettings.class
+})
 public class ApiConfiguration {
 
   @Bean
@@ -104,8 +110,24 @@ public class ApiConfiguration {
 
   @Bean
   @ConditionalOnExpression(ProcessRole.API)
-  PlanJobs planJobs(IdempotentCalls calls, Clock clock, ApiSettings settings) {
-    return new PlanJobs(calls, new JobRepository(), clock, settings.maxIdLength());
+  PlanJobs planJobs(
+      IdempotentCalls calls,
+      ObjectProvider<DataSource> sources,
+      Clock clock,
+      ApiSettings settings) {
+    return new PlanJobs(calls, new AppConnections(sources), clock, settings.maxIdLength());
+  }
+
+  @Bean
+  @ConditionalOnExpression(ProcessRole.WORKER)
+  JobClaims jobClaims(JobSettings settings) {
+    return new JobClaims(new JobRepository(), settings);
+  }
+
+  @Bean
+  @ConditionalOnExpression(ProcessRole.WORKER)
+  JobReaper jobReaper(ObjectProvider<DataSource> sources, Clock clock, JobSettings settings) {
+    return new JobReaper(sources.getObject(), new JobRepository(), clock, settings);
   }
 
   @Bean

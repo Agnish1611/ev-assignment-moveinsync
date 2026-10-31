@@ -10,9 +10,16 @@ public final class ApiModels {
     throw new IllegalStateException("utility");
   }
 
-  public record PlanJobRequest(String shard) {}
+  public record PlanJobRequest(String shard, String mode) {}
 
   public record PlanJobAccepted(String jobId, String shard, String status) {}
+
+  /**
+   * {@code publishedVersion} is 0 until a head is stored. {@code code} is empty until a terminal
+   * state.
+   */
+  public record PlanJobStatus(
+      String jobId, String shard, String status, String code, long publishedVersion, String mode) {}
 
   public record PlanHeadView(String shard, long version) {}
 

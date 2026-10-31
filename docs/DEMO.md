@@ -70,7 +70,14 @@ curl -sS -D - "http://localhost:8080/v1/plans/current?shard=shard-demo" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-The post is `202` with `"status":"ACCEPTED"`. The read is `404` and `PLAN_NOT_FOUND`. Nothing was published.
+The post is `202` with `"status":"ACCEPTED"`. The read is `404` and `PLAN_NOT_FOUND`. Nothing was published. `$JOB` is the `jobId` from the post.
+
+```bash
+curl -sS -D - "http://localhost:8080/v1/plans/jobs/$JOB" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+The job read is `200`. `status` is `ACCEPTED`, `code` is empty, and `publishedVersion` is `0`.
 
 ## Battery event
 

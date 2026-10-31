@@ -24,6 +24,7 @@ public final class EnvelopeCodec {
   private static final int TRIGGER = 12;
   private static final int PUBLISHED = 13;
   private static final int CONFIG = 14;
+  private static final int REQUESTED = 15;
 
   private EnvelopeCodec() {
     throw new IllegalStateException("utility");
@@ -76,6 +77,7 @@ public final class EnvelopeCodec {
           case TRIGGER -> payload = readTrigger(in.readByteArray());
           case PUBLISHED -> payload = readPublished(in.readByteArray());
           case CONFIG -> payload = readConfig(in.readByteArray());
+          case REQUESTED -> payload = readRequested(in.readByteArray());
           default -> in.skipField(tag);
         }
       }
@@ -104,6 +106,8 @@ public final class EnvelopeCodec {
       case Envelope.PlanPublished published ->
           out.writeByteArray(PUBLISHED, publishedBytes(published));
       case Envelope.ConfigChanged changed -> out.writeByteArray(CONFIG, configBytes(changed));
+      case Envelope.PlanRequested requested ->
+          out.writeByteArray(REQUESTED, requestedBytes(requested));
     }
   }
 
@@ -228,6 +232,32 @@ public final class EnvelopeCodec {
       }
     }
     return new Envelope.ConfigChanged(kind, subject);
+  }
+
+  private static byte[] requestedBytes(Envelope.PlanRequested requested) throws IOException {
+    return nested(
+        out -> {
+          out.writeString(1, requested.shard());
+          out.writeString(2, requested.jobId());
+          out.writeString(3, requested.mode());
+        });
+  }
+
+  private static Envelope.PlanRequested readRequested(byte[] bytes) throws IOException {
+    CodedInputStream in = CodedInputStream.newInstance(bytes);
+    String shard = "";
+    String jobId = "";
+    String mode = "";
+    while (!in.isAtEnd()) {
+      int tag = in.readTag();
+      switch (WireFormat.getTagFieldNumber(tag)) {
+        case 1 -> shard = in.readStringRequireUtf8();
+        case 2 -> jobId = in.readStringRequireUtf8();
+        case 3 -> mode = in.readStringRequireUtf8();
+        default -> in.skipField(tag);
+      }
+    }
+    return new Envelope.PlanRequested(shard, jobId, mode);
   }
 
   private static Envelope.PlanPublished readPublished(byte[] bytes) throws IOException {

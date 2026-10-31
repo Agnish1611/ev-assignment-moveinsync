@@ -6,6 +6,7 @@ import com.moveinsync.ev.domain.schedule.TripAssignment;
 import com.moveinsync.ev.domain.schedule.UnassignedReasonCode;
 import com.moveinsync.ev.domain.schedule.UnassignedTrip;
 import com.moveinsync.ev.domain.schedule.VehicleSchedule;
+import com.moveinsync.ev.service.bus.Topics;
 import com.moveinsync.ev.service.observe.PublishObserver;
 import com.moveinsync.ev.service.observe.PublishedSample;
 import com.moveinsync.ev.service.repository.PlanHeadRepository;
@@ -172,7 +173,8 @@ public final class PlanPublication {
     reads.insertUnassigned(connection, tenant, command.shard(), version, command.plan());
     heads.insertProcessed(
         connection, tenant, command.producer(), command.sequence(), command.shard(), version);
-    heads.insertOutbox(connection, tenant, command.shard(), version, now);
+    heads.insertOutbox(
+        connection, tenant, command.shard(), version, "PLAN_PUBLISHED", now, Topics.PLAN_EVENTS);
     heads.insertReplan(
         connection,
         tenant,

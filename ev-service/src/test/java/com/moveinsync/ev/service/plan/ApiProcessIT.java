@@ -28,6 +28,7 @@ class ApiProcessIT {
   @Autowired private MockMvc mvc;
   @Autowired private ObjectProvider<CatalogService> catalog;
   @Autowired private ObjectProvider<OutboxPump> pump;
+  @Autowired private ObjectProvider<JobReaper> reaper;
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
@@ -53,5 +54,6 @@ class ApiProcessIT {
     mvc.perform(get("/actuator/health")).andExpect(status().isOk());
     assertThat(catalog.getIfAvailable()).isNotNull();
     assertThat(pump.getIfAvailable()).isNull();
+    assertThat(reaper.getIfAvailable()).isNull();
   }
 }

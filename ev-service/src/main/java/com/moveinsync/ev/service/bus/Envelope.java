@@ -44,7 +44,7 @@ public record Envelope(
 
   /** One body. Coordinates are not part of the contract. */
   public sealed interface Payload
-      permits Telemetry, ChargerStatus, PlanTrigger, PlanPublished, ConfigChanged {}
+      permits Telemetry, ChargerStatus, PlanTrigger, PlanPublished, ConfigChanged, PlanRequested {}
 
   /** Cab energy in watt-hours. */
   public record Telemetry(String cabId, long socWh) implements Payload {
@@ -87,6 +87,21 @@ public record Envelope(
       requireOpaque(shard, "shard");
       if (version <= 0L) {
         throw new IllegalArgumentException("version must be positive");
+      }
+    }
+  }
+
+  /** A plan job. {@code mode} is {@code INITIAL} or {@code FULL_REPLAN}. */
+  public record PlanRequested(String shard, String jobId, String mode) implements Payload {
+
+    public static final String INITIAL = "INITIAL";
+    public static final String FULL_REPLAN = "FULL_REPLAN";
+
+    public PlanRequested {
+      requireOpaque(shard, "shard");
+      requireOpaque(jobId, "jobId");
+      if (!INITIAL.equals(mode) && !FULL_REPLAN.equals(mode)) {
+        throw new IllegalArgumentException("mode is not supported");
       }
     }
   }
