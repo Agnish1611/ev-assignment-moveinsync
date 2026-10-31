@@ -61,12 +61,29 @@ public final class ApiModels {
   public record Accepted(String status) {}
 
   public record HubRequest(
-      String hubId, String name, String locationId, String zone, int chargerCount) {}
+      String hubId,
+      String name,
+      String locationId,
+      String zone,
+      int chargerCount,
+      Integer latitudeMicros,
+      Integer longitudeMicros) {}
 
   public record ChargerRequest(String chargerId, String hubId, int powerKw) {}
 
   public record VehicleRequest(
-      String vehicleId, long batteryWh, int consumptionWhPerKm, int maxChargeKw) {}
+      String vehicleId,
+      long batteryWh,
+      int consumptionWhPerKm,
+      int maxChargeKw,
+      String shardId,
+      Long shiftStartSocWh,
+      String locationId,
+      Integer latitudeMicros,
+      Integer longitudeMicros,
+      String availableFrom,
+      String horizonStart,
+      String horizonEnd) {}
 
   public record TripRequest(
       String tripId,
@@ -75,7 +92,15 @@ public final class ApiModels {
       String toLocation,
       int distanceMetres,
       String latestFinish,
-      String employeeRef) {}
+      String employeeRef,
+      String shardId,
+      Integer durationSeconds,
+      Integer fromLatitudeMicros,
+      Integer fromLongitudeMicros,
+      Integer toLatitudeMicros,
+      Integer toLongitudeMicros,
+      String horizonStart,
+      String horizonEnd) {}
 
   public record TariffRequest(
       String hubId, String windowId, String localStart, String localEnd, long rateMicros) {}
@@ -83,4 +108,18 @@ public final class ApiModels {
   public record UserRequest(String userId, String role) {}
 
   public record Created(String id) {}
+
+  /** One row of a bulk catalog write. A stored row has an empty code. */
+  public record RecordResult(String id, String status, String code) {}
+
+  /** Per-record results for one catalog batch. One bad row does not reject the others. */
+  public record BulkResult(List<RecordResult> results) {
+    public BulkResult {
+      Objects.requireNonNull(results, "results must not be null");
+      results = List.copyOf(results);
+    }
+  }
+
+  /** One parsed batch element. A non-empty code means the element was not a record. */
+  public record Intake<T>(T value, String code) {}
 }

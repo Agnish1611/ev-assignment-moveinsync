@@ -31,6 +31,7 @@ final class CatalogRules {
     if (hub.chargerCount() <= 0 || hub.chargerCount() > settings.maxChargerCount()) {
       throw new ApiException(400, "INVALID_CAPACITY", "The charger count is not valid");
     }
+    coordinates(hub.latitudeMicros(), hub.longitudeMicros());
   }
 
   static void charger(ChargerRequest charger, ApiSettings settings) {
@@ -41,7 +42,7 @@ final class CatalogRules {
     }
   }
 
-  static void vehicle(VehicleRequest vehicle, ApiSettings settings) {
+  static VehicleFacts vehicle(VehicleRequest vehicle, ApiSettings settings) {
     OpaqueIds.require(vehicle.vehicleId(), settings.maxIdLength());
     if (vehicle.batteryWh() <= 0L
         || vehicle.consumptionWhPerKm() <= 0
@@ -51,6 +52,20 @@ final class CatalogRules {
     if (vehicle.maxChargeKw() > settings.maxPowerKw()) {
       throw new ApiException(400, "INVALID_CAPACITY", "The vehicle capacity is not valid");
     }
+    optionalId(vehicle.shardId(), settings);
+    optionalId(vehicle.locationId(), settings);
+    charge(vehicle);
+    coordinates(vehicle.latitudeMicros(), vehicle.longitudeMicros());
+    if (vehicle.locationId() == null
+        && (vehicle.latitudeMicros() != null || vehicle.longitudeMicros() != null)) {
+      throw new ApiException(400, "MISSING_LOCATION", "The location is not valid");
+    }
+    Instant available = vehicle.availableFrom() == null ? null : instant(vehicle.availableFrom());
+    Window horizon = horizon(vehicle.shardId(), vehicle.horizonStart(), vehicle.horizonEnd());
+    if (horizon == null) {
+      return new VehicleFacts(available, null, null);
+    }
+    return new VehicleFacts(available, horizon.start(), horizon.end());
   }
 
   static TripTimes trip(TripRequest trip, ApiSettings settings) {
@@ -66,7 +81,15 @@ final class CatalogRules {
     if (latest.isBefore(start)) {
       throw new ApiException(400, "INVALID_TIME", "A timestamp is not valid");
     }
-    return new TripTimes(start, latest);
+    optionalId(trip.shardId(), settings);
+    duration(trip.durationSeconds());
+    coordinates(trip.fromLatitudeMicros(), trip.fromLongitudeMicros());
+    coordinates(trip.toLatitudeMicros(), trip.toLongitudeMicros());
+    Window horizon = horizon(trip.shardId(), trip.horizonStart(), trip.horizonEnd());
+    if (horizon == null) {
+      return new TripTimes(start, latest, null, null);
+    }
+    return new TripTimes(start, latest, horizon.start(), horizon.end());
   }
 
   static void tariff(TariffRequest tariff, ApiSettings settings) {
@@ -121,5 +144,59 @@ final class CatalogRules {
     }
   }
 
-  record TripTimes(Instant start, Instant latest) {}
+  private static void optionalId(String value, ApiSettings settings) {
+    if (value != null) {
+      OpaqueIds.require(value, settings.maxIdLength());
+    }
+  }
+
+  private static void charge(VehicleRequest vehicle) {
+    if (vehicle.shiftStartSocWh() == null) {
+      return;
+    }
+    if (vehicle.shiftStartSocWh() < 0L || vehicle.shiftStartSocWh() > vehicle.batteryWh()) {
+      throw new ApiException(400, "INVALID_CAPACITY", "The vehicle capacity is not valid");
+    }
+  }
+
+  private static void duration(Integer seconds) {
+    if (seconds != null && seconds < 0) {
+      throw new ApiException(400, "INVALID_DURATION", "The duration is not valid");
+    }
+  }
+
+  static void coordinates(Integer latitude, Integer longitude) {
+    if (latitude == null && longitude == null) {
+      return;
+    }
+    if (latitude == null
+        || longitude == null
+        || latitude < -90_000_000
+        || latitude > 90_000_000
+        || longitude < -180_000_000
+        || longitude > 180_000_000) {
+      throw new ApiException(400, "INVALID_COORDINATES", "The coordinates are not valid");
+    }
+  }
+
+  private static Window horizon(String shard, String start, String end) {
+    if (start == null && end == null) {
+      return null;
+    }
+    if (shard == null || start == null || end == null) {
+      throw new ApiException(400, "INVALID_TIME", "A timestamp is not valid");
+    }
+    Instant opened = instant(start);
+    Instant closed = instant(end);
+    if (!opened.isBefore(closed)) {
+      throw new ApiException(400, "INVALID_TIME", "A timestamp is not valid");
+    }
+    return new Window(opened, closed);
+  }
+
+  record Window(Instant start, Instant end) {}
+
+  record VehicleFacts(Instant availableFrom, Instant horizonStart, Instant horizonEnd) {}
+
+  record TripTimes(Instant start, Instant latest, Instant horizonStart, Instant horizonEnd) {}
 }

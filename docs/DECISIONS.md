@@ -157,3 +157,7 @@ Two web instances each have their own Kafka consumer group and share one Postgre
 ### D33 — Regret table
 
 Regret insertion keeps the feasible cabs for each open trip. A commit that does not book a plug replaces that cab's offer and leaves the others. A commit that books a plug scores every open trip again, because the calendar can block a different cab. The 30 second check is unchanged. Rescoring every cab on every insertion put the 300-cab fleet at 35.8 seconds on the GitHub runner. The selection rule is the same: higher regret, then earlier start, then trip id.
+
+### D34 — Bulk catalog
+
+`POST /v1/admin/hubs`, chargers, vehicles, trips, tariffs, and users accept one object or a JSON array on the same path. `ev.api.max-bulk-items` is 2,000 and `ev.api.max-body-bytes` is 2 MiB. A batch spends one `Idempotency-Key` and one rate-limit token. Each element is `STORED` or `QUARANTINED` with a stable code. The response carries opaque ids and codes, not coordinates or employee refs. A bad element rolls back to its savepoint, so the rest of the batch still commits. `catalog_version` increases once when at least one row is stored, and one `ev.config.v1` event is sent for that batch. Coordinates are written only to `fleet_location`. `FleetSeeder.eveningTrips()` is the 1,501-row body: 1,500 evening trips plus one finish that is before its start.

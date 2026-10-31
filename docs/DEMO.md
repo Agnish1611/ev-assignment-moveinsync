@@ -43,6 +43,20 @@ curl -sS -D - -X POST http://localhost:8080/v1/admin/hubs \
 
 The first response is `201` and `{"id":"HUB-1"}`. Repeat the same command. The stored response is replayed. A different path with `hub-demo-1` is `409`.
 
+## Bulk trips
+
+The same paths accept a JSON array. One `Idempotency-Key` covers the batch, and the rate limit charges one token. A bad element is quarantined. The others are stored. The response lists opaque ids and codes.
+
+```bash
+curl -sS -D - -X POST http://localhost:8080/v1/admin/trips \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: trips-demo-1' \
+  -d '[{"tripId":"TRIP-DEMO-1","start":"2026-10-30T09:00:00Z","fromLocation":"LOC-P","toLocation":"LOC-D","distanceMetres":2000,"latestFinish":"2026-10-30T09:10:00Z","employeeRef":"EMP-1","durationSeconds":600},{"tripId":"TRIP-DEMO-BAD","start":"2026-10-30T09:00:00Z","fromLocation":"LOC-P","toLocation":"LOC-D","distanceMetres":2000,"latestFinish":"2026-10-30T08:00:00Z","employeeRef":"EMP-1","durationSeconds":600}]'
+```
+
+The response is `200`. `TRIP-DEMO-1` is `STORED`. `TRIP-DEMO-BAD` is `QUARANTINED` with `INVALID_TIME`. `FleetSeeder.eveningTrips()` is the same shape for the 1,500-trip evening fleet plus one bad row. The body cap is 2 MiB and the array cap is 2,000.
+
 ## A job does not publish a head
 
 ```bash

@@ -8,13 +8,18 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record ApiSettings(
     @DefaultValue("60") int rateCapacity,
     @DefaultValue("60") int rateWindowSeconds,
-    @DefaultValue("8192") int maxBodyBytes,
+    @DefaultValue("2097152") int maxBodyBytes,
     @DefaultValue("64") int maxIdLength,
     @DefaultValue("500") int maxPowerKw,
-    @DefaultValue("64") int maxChargerCount) {
+    @DefaultValue("64") int maxChargerCount,
+    @DefaultValue("2000") int maxBulkItems) {
 
   public ApiSettings {
-    if (rateCapacity <= 0 || rateWindowSeconds <= 0 || maxBodyBytes <= 0 || maxIdLength <= 0) {
+    if (rateCapacity <= 0
+        || rateWindowSeconds <= 0
+        || maxBodyBytes <= 0
+        || maxIdLength <= 0
+        || maxBulkItems <= 0) {
       throw new IllegalArgumentException("api limits must be positive");
     }
     if (maxPowerKw <= 0 || maxChargerCount <= 0) {

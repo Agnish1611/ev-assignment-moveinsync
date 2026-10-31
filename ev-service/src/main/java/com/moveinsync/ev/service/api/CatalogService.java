@@ -1,13 +1,14 @@
 package com.moveinsync.ev.service.api;
 
+import com.moveinsync.ev.service.api.ApiModels.BulkResult;
 import com.moveinsync.ev.service.api.ApiModels.ChargerRequest;
 import com.moveinsync.ev.service.api.ApiModels.Created;
 import com.moveinsync.ev.service.api.ApiModels.HubRequest;
+import com.moveinsync.ev.service.api.ApiModels.Intake;
 import com.moveinsync.ev.service.api.ApiModels.TariffRequest;
 import com.moveinsync.ev.service.api.ApiModels.TripRequest;
 import com.moveinsync.ev.service.api.ApiModels.UserRequest;
 import com.moveinsync.ev.service.api.ApiModels.VehicleRequest;
-import com.moveinsync.ev.service.api.CatalogRules.TripTimes;
 import com.moveinsync.ev.service.bus.BusRecord;
 import com.moveinsync.ev.service.bus.Envelope;
 import com.moveinsync.ev.service.bus.EnvelopeCodec;
@@ -16,7 +17,9 @@ import com.moveinsync.ev.service.bus.Topics;
 import com.moveinsync.ev.service.repository.CatalogRepository;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -45,7 +48,6 @@ public final class CatalogService {
   }
 
   public ResponseEntity<Created> hub(Caller caller, String key, HubRequest hub) {
-    CatalogRules.hub(hub, settings);
     return store(
         caller,
         key,
@@ -53,13 +55,24 @@ public final class CatalogService {
         "HUB",
         hub.hubId(),
         connection -> {
-          catalog.storeHub(connection, caller.tenant(), hub);
+          CatalogWrites.hub(connection, catalog, settings, caller.tenant(), hub);
           return new Created(hub.hubId());
         });
   }
 
+  public ResponseEntity<BulkResult> hubs(Caller caller, String key, List<Intake<HubRequest>> rows) {
+    return batch(
+        caller,
+        key,
+        "/v1/admin/hubs",
+        "HUB",
+        rows,
+        HubRequest::hubId,
+        (connection, hub) ->
+            CatalogWrites.hub(connection, catalog, settings, caller.tenant(), hub));
+  }
+
   public ResponseEntity<Created> charger(Caller caller, String key, ChargerRequest charger) {
-    CatalogRules.charger(charger, settings);
     return store(
         caller,
         key,
@@ -67,13 +80,25 @@ public final class CatalogService {
         "CHARGER",
         charger.chargerId(),
         connection -> {
-          catalog.storeCharger(connection, caller.tenant(), charger);
+          CatalogWrites.charger(connection, catalog, settings, caller.tenant(), charger);
           return new Created(charger.chargerId());
         });
   }
 
+  public ResponseEntity<BulkResult> chargers(
+      Caller caller, String key, List<Intake<ChargerRequest>> rows) {
+    return batch(
+        caller,
+        key,
+        "/v1/admin/chargers",
+        "CHARGER",
+        rows,
+        ChargerRequest::chargerId,
+        (connection, charger) ->
+            CatalogWrites.charger(connection, catalog, settings, caller.tenant(), charger));
+  }
+
   public ResponseEntity<Created> vehicle(Caller caller, String key, VehicleRequest vehicle) {
-    CatalogRules.vehicle(vehicle, settings);
     return store(
         caller,
         key,
@@ -81,13 +106,25 @@ public final class CatalogService {
         "VEHICLE",
         vehicle.vehicleId(),
         connection -> {
-          catalog.storeVehicle(connection, caller.tenant(), vehicle);
+          CatalogWrites.vehicle(connection, catalog, settings, caller.tenant(), vehicle);
           return new Created(vehicle.vehicleId());
         });
   }
 
+  public ResponseEntity<BulkResult> vehicles(
+      Caller caller, String key, List<Intake<VehicleRequest>> rows) {
+    return batch(
+        caller,
+        key,
+        "/v1/admin/vehicles",
+        "VEHICLE",
+        rows,
+        VehicleRequest::vehicleId,
+        (connection, vehicle) ->
+            CatalogWrites.vehicle(connection, catalog, settings, caller.tenant(), vehicle));
+  }
+
   public ResponseEntity<Created> trip(Caller caller, String key, TripRequest trip) {
-    TripTimes times = CatalogRules.trip(trip, settings);
     return store(
         caller,
         key,
@@ -95,13 +132,25 @@ public final class CatalogService {
         "TRIP",
         trip.tripId(),
         connection -> {
-          catalog.storeTrip(connection, caller.tenant(), trip, times.start(), times.latest());
+          CatalogWrites.trip(connection, catalog, settings, caller.tenant(), trip);
           return new Created(trip.tripId());
         });
   }
 
+  public ResponseEntity<BulkResult> trips(
+      Caller caller, String key, List<Intake<TripRequest>> rows) {
+    return batch(
+        caller,
+        key,
+        "/v1/admin/trips",
+        "TRIP",
+        rows,
+        TripRequest::tripId,
+        (connection, trip) ->
+            CatalogWrites.trip(connection, catalog, settings, caller.tenant(), trip));
+  }
+
   public ResponseEntity<Created> tariff(Caller caller, String key, TariffRequest tariff) {
-    CatalogRules.tariff(tariff, settings);
     return store(
         caller,
         key,
@@ -109,13 +158,25 @@ public final class CatalogService {
         "TARIFF",
         tariff.windowId(),
         connection -> {
-          catalog.storeTariff(connection, caller.tenant(), tariff);
+          CatalogWrites.tariff(connection, catalog, settings, caller.tenant(), tariff);
           return new Created(tariff.windowId());
         });
   }
 
+  public ResponseEntity<BulkResult> tariffs(
+      Caller caller, String key, List<Intake<TariffRequest>> rows) {
+    return batch(
+        caller,
+        key,
+        "/v1/admin/tariffs",
+        "TARIFF",
+        rows,
+        TariffRequest::windowId,
+        (connection, tariff) ->
+            CatalogWrites.tariff(connection, catalog, settings, caller.tenant(), tariff));
+  }
+
   public ResponseEntity<Created> user(Caller caller, String key, UserRequest user) {
-    CatalogRules.user(user, settings);
     return store(
         caller,
         key,
@@ -123,9 +184,22 @@ public final class CatalogService {
         "USER",
         user.userId(),
         connection -> {
-          catalog.storeUser(connection, caller.tenant(), user);
+          CatalogWrites.user(connection, catalog, settings, caller.tenant(), user);
           return new Created(user.userId());
         });
+  }
+
+  public ResponseEntity<BulkResult> users(
+      Caller caller, String key, List<Intake<UserRequest>> rows) {
+    return batch(
+        caller,
+        key,
+        "/v1/admin/users",
+        "USER",
+        rows,
+        UserRequest::userId,
+        (connection, user) ->
+            CatalogWrites.user(connection, catalog, settings, caller.tenant(), user));
   }
 
   private ResponseEntity<Created> store(
@@ -144,8 +218,38 @@ public final class CatalogService {
         Created.class,
         connection -> {
           Created created = work.apply(connection);
+          catalog.bump(connection, caller.tenant());
           announce(caller, kind, subject);
           return created;
+        });
+  }
+
+  private <T> ResponseEntity<BulkResult> batch(
+      Caller caller,
+      String key,
+      String path,
+      String kind,
+      List<Intake<T>> rows,
+      Function<T, String> identifier,
+      CatalogIngest.RowStore<T> store) {
+    if (rows == null || rows.isEmpty() || rows.size() > settings.maxBulkItems()) {
+      throw new ApiException(400, "BULK_LIMIT", "The batch size is not valid");
+    }
+    return calls.once(
+        caller,
+        key,
+        "POST",
+        path,
+        HttpStatus.OK.value(),
+        BulkResult.class,
+        connection -> {
+          CatalogIngest.Outcome outcome =
+              CatalogIngest.apply(connection, rows, settings.maxIdLength(), identifier, store);
+          if (outcome.stored() > 0) {
+            catalog.bump(connection, caller.tenant());
+            announce(caller, kind, "bulk");
+          }
+          return outcome.result();
         });
   }
 

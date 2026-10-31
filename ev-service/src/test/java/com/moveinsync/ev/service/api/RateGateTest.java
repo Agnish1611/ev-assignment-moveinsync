@@ -9,7 +9,7 @@ class RateGateTest {
 
   @Test
   void theThirdCallInAWindowIsRefused() {
-    RateGate gate = new RateGate(new ApiSettings(2, 60, 8192, 64, 500, 64));
+    RateGate gate = new RateGate(new ApiSettings(2, 60, 8192, 64, 500, 64, 2000));
 
     assertThat(gate.allow("user-1")).isTrue();
     assertThat(gate.allow("user-1")).isTrue();
