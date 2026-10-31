@@ -186,4 +186,10 @@ The worker consumes `ev.plan-triggers.v1`. The poll thread pauses the partition 
 
 `INITIAL` builds a plan with expected head version 0. `FULL_REPLAN` rebuilds from the current ground truth and publishes only when the head is still the version read before the solve. The validator sees a fleet loaded again at publication, not the planner's own claims. If the catalog version changes during the solve, the worker solves once more. A second change is `STALE_INPUT` with code `CATALOG_MOVED` and publishes nothing. A fleet the loader rejects is `INFEASIBLE` with the loader's code. A lost compare-and-set is `FAILED` with code `CONFLICT`. A validator rejection is `REJECTED` with the rule id.
 
-A drift envelope on the same topic is acknowledged and not applied. The detector is still a later change. Publication goes through the `PlanPublication` bean. The web process still does not solve.
+Publication goes through the `PlanPublication` bean. The web process still does not solve. A battery or charger-failure trigger is applied by D38. Other drift kinds are acknowledged and not applied.
+
+### D38 — Detector, telemetry, and a drifted head
+
+The `detector` role persists telemetry and charger status. A battery reading is stored on `vehicle_state` when its sequence is newer. The gate compares it with the cab's charge on the published snapshot. A drifted reading is a `BATTERY` trigger on `ev.plan-triggers.v1`, using the reading's producer and sequence. A charger-status event stores `OPERATIONAL` or `FAULTY`. A `CHARGER_FAILURE` trigger also records an outage from the observation until the shard horizon when that horizon is still ahead.
+
+The worker runs the ladder for `BATTERY` and `CHARGER_FAILURE`. Other trigger kinds are still acknowledged and not applied. The ladder clock is the trigger's observation time. The candidate is published only when the validator accepts a fleet loaded after the state write. A rejection or a lost compare-and-set leaves the previous head. The stored replan tier and ring are 0 because the ladder does not report which tier won. The change count is the assignment delta. A catalog move during the solve is retried. Silence decay is not on a timer.

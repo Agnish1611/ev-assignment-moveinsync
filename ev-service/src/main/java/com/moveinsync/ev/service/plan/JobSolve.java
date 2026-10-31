@@ -39,6 +39,7 @@ public final class JobSolve {
 
   private final JobLedger ledger;
   private final JobPublisher publisher;
+  private final DriftSolve drifts;
   private final FleetSource fleets;
   private final Clock clock;
   private final long solveMillis;
@@ -64,9 +65,14 @@ public final class JobSolve {
     this.solveMillis = solveMillis;
     this.ledger = new JobLedger(dataSource, jobs, claims, heads, clock);
     this.publisher = new JobPublisher(dataSource, publication, reads, clock);
+    this.drifts = new DriftSolve(dataSource, fleets, heads, publisher, clock, solveMillis);
   }
 
   public void accept(Envelope envelope) {
+    if (envelope.payload() instanceof Envelope.PlanTrigger) {
+      drifts.accept(envelope);
+      return;
+    }
     if (!(envelope.payload() instanceof Envelope.PlanRequested requested)) {
       return;
     }

@@ -33,6 +33,7 @@ class WorkerProcessIT {
   @Autowired private ObjectProvider<OutboxPump> pump;
   @Autowired private ObjectProvider<JobReaper> reaper;
   @Autowired private ObjectProvider<PlannerWorker> worker;
+  @Autowired private ObjectProvider<FleetDetector> detector;
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
@@ -61,6 +62,7 @@ class WorkerProcessIT {
     assertThat(pump.getIfAvailable()).isNotNull();
     assertThat(reaper.getIfAvailable()).isNotNull();
     assertThat(worker.getIfAvailable()).isNotNull();
+    assertThat(detector.getIfAvailable()).isNotNull();
     assertThat(catalog.getIfAvailable()).isNull();
     assertThat(admin.getIfAvailable()).isNull();
   }

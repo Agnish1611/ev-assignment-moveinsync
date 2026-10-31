@@ -44,21 +44,33 @@ final class JobPublisher {
       Instant started,
       SolveResult result,
       LoadedFleet fresh) {
+    return publish(envelope, requested.shard(), requested.mode(), expected, started, result, fresh);
+  }
+
+  PublishResult publish(
+      Envelope envelope,
+      String shard,
+      String outcome,
+      long expected,
+      Instant started,
+      SolveResult result,
+      LoadedFleet fresh) {
     long millis = Math.max(0L, Duration.between(started, clock.instant()).toMillis());
     return publication.publish(
-        dataSource, command(envelope, requested, expected, result, fresh, millis));
+        dataSource, command(envelope, shard, outcome, expected, result, fresh, millis));
   }
 
   private PublishCommand command(
       Envelope envelope,
-      Envelope.PlanRequested requested,
+      String shard,
+      String outcome,
       long expected,
       SolveResult result,
       LoadedFleet fresh,
       long millis) {
     return new PublishCommand(
         TenantId.of(envelope.tenant()),
-        requested.shard(),
+        shard,
         expected,
         result.plan(),
         fresh.validation(),
@@ -67,8 +79,8 @@ final class JobPublisher {
         0,
         0,
         millis,
-        changed(envelope.tenant(), requested.shard(), expected, result.plan()),
-        requested.mode(),
+        changed(envelope.tenant(), shard, expected, result.plan()),
+        outcome,
         FleetLowerBound.of(fresh.planner()).backups(),
         result.flow().relaxationMicros());
   }

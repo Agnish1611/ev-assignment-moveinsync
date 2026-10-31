@@ -37,20 +37,23 @@ Keycloak realm `ev` puts `tenant_id` and `role` on the access token. The applica
 
 ## Battery-drift re-plan
 
-This is the drift path. A battery post returns 202 and leaves a drift envelope on `plan-triggers`. The worker acknowledges that envelope and does not run the ladder yet. A plan job is different: the worker solves it and publishes through `PlanPublication`. The ladder below is what `WorkerCrashTest`, `DriftStormTest`, and `PlanPublication` run.
+This is the drift path. A battery post returns 202 and leaves the reading on `ev.telemetry.v1`. The detector stores it and, when it has drifted from the published head, sends a trigger. The worker runs the ladder and publishes through `PlanPublication` only when the validator accepts the fresh fleet. A charger failure is stored as `FAULTY`, with an outage until the shard horizon, and the ladder moves sessions off that plug. The web process still does not solve.
 
 ```mermaid
 sequenceDiagram
   participant Client
   participant Api
   participant Bus
+  participant Detector
   participant Worker
   participant Validator
   participant Store
   Client->>Api: POST /v1/events/battery
-  Api->>Bus: trigger envelope
+  Api->>Bus: telemetry envelope
   Api-->>Client: 202 ACCEPTED
-  Worker->>Bus: claim the next sequence
+  Bus->>Detector: persist the reading
+  Detector->>Bus: battery trigger when it has drifted
+  Bus->>Worker: claim the next sequence
   Worker->>Worker: ladder, stop at the deadline
   Worker->>Validator: candidate against ground truth
   Validator-->>Worker: valid
@@ -78,4 +81,4 @@ The objective is fewer backup trips, then the change penalty times the number of
 
 ## Left out
 
-The web process does not assemble a fleet from the admin tables, so it does not start the ladder. The worker does that for a plan job. A drift envelope is still not repaired. There is no circuit breaker and no `Retry-After` on a database failure. The response is `STORE_FAILED`. Traces stay in the process. There is no collector. The distance cache is not passed into the solver. Compose is the deployment. There is no Kubernetes manifest and no second region. There is no learned consumption model, no external routing engine, and no Debezium connector. The outbox pump publishes rows a worker has already committed.
+The web process does not assemble a fleet from the admin tables, so it does not start the ladder. The worker does that for a plan job and for a battery or charger-failure trigger. There is no circuit breaker and no `Retry-After` on a database failure. The response is `STORE_FAILED`. Traces stay in the process. There is no collector. The distance cache is not passed into the solver. Compose is the deployment. There is no Kubernetes manifest and no second region. There is no learned consumption model, no external routing engine, and no Debezium connector. The outbox pump publishes rows a worker has already committed.

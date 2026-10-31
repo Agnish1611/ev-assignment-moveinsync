@@ -89,7 +89,7 @@ curl -sS -D - -X POST http://localhost:8080/v1/events/battery \
   -d '{"cabId":"CAB-1","socWh":24600,"observedAt":"2026-10-30T09:00:00Z","sequence":1}'
 ```
 
-The response is `202` and `{"status":"ACCEPTED"}`. The envelope is on Kafka. These two processes do not solve it. The solve path is the worker covered by `DriftStormTest` and `WorkerCrashTest`.
+The response is `202` and `{"status":"ACCEPTED"}`. The web process does not solve. The worker repairs a reading when that cab is on a published plan. This demo cab has no plan, so the current head does not change.
 
 ## Live failure: stop one instance
 

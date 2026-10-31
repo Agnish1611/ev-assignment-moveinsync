@@ -31,6 +31,7 @@ class ApiProcessIT {
   @Autowired private ObjectProvider<OutboxPump> pump;
   @Autowired private ObjectProvider<JobReaper> reaper;
   @Autowired private ObjectProvider<PlannerWorker> worker;
+  @Autowired private ObjectProvider<FleetDetector> detector;
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
@@ -58,5 +59,6 @@ class ApiProcessIT {
     assertThat(pump.getIfAvailable()).isNull();
     assertThat(reaper.getIfAvailable()).isNull();
     assertThat(worker.getIfAvailable()).isNull();
+    assertThat(detector.getIfAvailable()).isNull();
   }
 }
